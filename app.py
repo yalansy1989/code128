@@ -49,7 +49,7 @@ def resize_to_exact(png_bytes: bytes, target_w_px: int, target_h_px: int) -> byt
 
 # واجهة
 st.set_page_config(page_title="Code-128 Jarir", page_icon="🔖", layout="centered")
-st.title("🔖 مولّد Code-128 بحجم جرير (بدون هوامش)")
+st.title("🔖 مولّد Code-128")
 
 num = st.text_input("أدخل الرقم/النص")
 if st.button("إنشاء الكود"):
@@ -69,3 +69,4 @@ if st.button("إنشاء الكود"):
             st.success("الكود يملأ الصورة بالكامل. اطبع بنسبة 100% بدون Fit to page.")
         except Exception as e:
             st.error(f"تعذّر الإنشاء: {e}")
+
