@@ -1,30 +1,39 @@
-# app.py
+# -*- coding: utf-8 -*-
+# مولّد Code-128 مضبوط على قياس جرير (عرض/ارتفاع بالبوصة)، PNG عالي الدقة
+
 import re
 from io import BytesIO
 import streamlit as st
 from barcode import Code128
 from barcode.writer import ImageWriter
 
-st.set_page_config(page_title="Code128 مضبوط المقاس", page_icon="🔖", layout="centered")
-st.title("🔖 مولّد Code-128 مطابق لقياس جرير")
+# ---- إعداد الصفحة ----
+st.set_page_config(page_title="مولّد Code-128 (مطابق جرير)", page_icon="🔖", layout="centered")
+st.markdown("<h1 style='text-align:right'>مولّد <b>Code-128</b> مطابق لقياس جرير</h1>", unsafe_allow_html=True)
 
+# ---- أدوات مساعدة ----
 ARABIC_DIGITS = str.maketrans("٠١٢٣٤٥٦٧٨٩", "0123456789")
+
 def sanitize_ascii(s: str) -> str:
+    """تحويل الأرقام العربية → إنجليزية + إزالة محارف الاتجاه/التحكم الخفية، وإبقاء ASCII فقط."""
     s = s.translate(ARABIC_DIGITS)
     bidi = r"\u200e\u200f\u202a-\u202e\u2066-\u2069\ufeff"
     s = re.sub(f"[{bidi}]", "", s)
-    return "".join(ch for ch in s if ord(ch) < 128).strip()
+    s = "".join(ch for ch in s if ord(ch) < 128)
+    return s.strip()
 
-def inches_to_mm(x): return x * 25.4
+def inches_to_mm(x: float) -> float:
+    return x * 25.4
 
-def render_png(data: str, dpi: int, module_width_mm: float, module_height_mm: float, quiet_mm: float):
+def render_png(data: str, dpi: int, module_width_mm: float, module_height_mm: float, quiet_mm: float) -> BytesIO:
+    """يرسم الباركود كـ PNG في الذاكرة."""
     writer = ImageWriter()
     opts = {
-        "write_text": False,
+        "write_text": False,             # بدون الرقم أسفل الباركود
         "dpi": dpi,
-        "module_width": module_width_mm,
-        "module_height": module_height_mm,
-        "quiet_zone": quiet_mm,
+        "module_width": module_width_mm, # عرض أصغر شريط (مم)
+        "module_height": module_height_mm,  # ارتفاع الأشرطة (مم)
+        "quiet_zone": quiet_mm,          # هامش صامت (مم) يضاف يمين/يسار
         "background": "white",
         "foreground": "black",
     }
@@ -32,73 +41,73 @@ def render_png(data: str, dpi: int, module_width_mm: float, module_height_mm: fl
     buf = BytesIO()
     code.write(buf, opts)
     buf.seek(0)
-    return buf, writer, code, opts
-
-def calc_total_width_mm(writer: ImageWriter, code_obj, opts) -> float:
-    # تستخدم دالة المكتبة الداخلية لحساب الحجم الحقيقي بناءً على الترميز الفعلي
-    w_mm, _ = writer.calculate_size(code_obj.get_fullcode(), opts["module_width"], opts["module_height"])
-    # تضيف calculate_size الـ quiet zone تلقائياً
-    return w_mm
+    return buf
 
 def fit_width_mm(data: str, target_width_mm: float, dpi: int, height_mm: float, quiet_mm: float,
                  mw_low=0.02, mw_high=0.8, tol=0.02):
     """
-    نضبط module_width بالـ binary search حتى يصبح العرض الكلي ≈ target_width_mm
-    tol = سماحية الخطأ بالملّيمتر (0.02mm كافية للطباعة).
+    نضبط module_width بالـ binary search حتى يساوي العرض الكلي المحسوب من المكتبة target_width_mm تقريبًا.
+    tol = سماحية الخطأ (مم). 0.02 مم كافية للطباعة.
     """
     data = sanitize_ascii(data)
     if not data:
         raise ValueError("النص بعد التنقية فارغ.")
 
-    # حدود البحث
+    writer = ImageWriter()
+    code = Code128(data, writer=writer)
+
     low, high = mw_low, mw_high
     best_mw, best_err = None, 1e9
 
-    writer = ImageWriter()
-    code = Code128(data, writer=writer)
     while high - low > 1e-4:
-        mid = (low + high) / 2
-        opts = {
-            "write_text": False,
-            "dpi": dpi,
-            "module_width": mid,
-            "module_height": height_mm,
-            "quiet_zone": quiet_mm,
-            "background": "white",
-            "foreground": "black",
-        }
-        w_mm, _ = writer.calculate_size(code.get_fullcode(), mid, height_mm)
-        err = w_mm - target_width_mm
+        mid = (low + high) / 2.0
+        # ملاحظة مهمة: calculate_size تقبل (fullcode, module_width, quiet_zone)
+        fullcode = code.get_fullcode()
+        total_w_mm, _ = writer.calculate_size(fullcode, mid, quiet_mm)
+        err = total_w_mm - target_width_mm
+
         if abs(err) < best_err:
             best_err, best_mw = abs(err), mid
+
         if err > 0:
-            high = mid
+            high = mid  # العرض أكبر من المطلوب → صغّر module_width
         else:
-            low = mid
+            low = mid   # العرض أصغر من المطلوب → كبّر module_width
+
         if abs(err) <= tol:
             best_mw = mid
             break
-    # الآن نرسم بالـ module_width المثالي
-    png_buf, _, _, _ = render_png(data, dpi, best_mw, height_mm, quiet_mm)
-    return png_buf, best_mw
 
-# -------- واجهة --------
-raw = st.text_input("النص / الرقم", "72626525252626625")
-col1, col2 = st.columns(2)
-with col1:
-    width_in  = st.number_input("العرض المستهدف (إنش)", value=1.86, min_value=0.5, step=0.01)
-    dpi       = st.slider("الدقّة (DPI)", 300, 1200, 600, step=100)
-with col2:
-    height_in = st.number_input("الارتفاع (إنش)", value=0.28, min_value=0.2, step=0.01)
-    quiet_mm  = st.number_input("الهامش الصامت لكل جانب (مم)", value=2.0, min_value=0.0, step=0.25)
+    png_buf = render_png(data, dpi, best_mw, height_mm, quiet_mm)
+    return png_buf, best_mw, data
 
-if st.button("إنشاء مطابق لجرير"):
-    try:
-        target_w_mm = inches_to_mm(width_in)
-        height_mm   = inches_to_mm(height_in)
-        buf, mw_used = fit_width_mm(raw, target_w_mm, dpi, height_mm, quiet_mm)
-        st.image(buf, caption=f"عرض مضبوط ≈ {width_in:.2f}″ | mw≈{mw_used:.3f} mm", use_container_width=True)
-        st.download_button("⬇️ تحميل PNG", data=buf, file_name="code128.png", mime="image/png")
-        st.info("ملاحظة: اطبع بنسبة 100% دون 'Fit to page'.")
-    except Exception as e:
-        st.error(f"خطأ: {e}")
+# ---- الواجهة ----
+with st.container(border=True):
+    raw = st.text_input("النص / الرقم", "72626525252626625")
+
+    col1, col2 = st.columns(2)
+    with col1:
+        width_in  = st.number_input("العرض المستهدف (إنش)", value=1.86, min_value=0.50, step=0.01)
+        dpi       = st.slider("الدقّة (DPI)", min_value=300, max_value=1200, value=600, step=100)
+    with col2:
+        height_in = st.number_input("الارتفاع (إنش)", value=0.28, min_value=0.20, step=0.01)
+        quiet_mm  = st.number_input("الهامش الصامت لكل جانب (مم)", value=2.0, min_value=0.0, step=0.25)
+
+    clean = sanitize_ascii(raw)
+    st.caption(f"النص بعد التنقية: `{clean}`")
+
+    if st.button("إنشاء الكود", use_container_width=False):
+        try:
+            target_w_mm = inches_to_mm(width_in)
+            height_mm   = inches_to_mm(height_in)
+
+            png_buf, mw_used, used_data = fit_width_mm(
+                clean, target_w_mm, dpi, height_mm, quiet_mm
+            )
+
+            st.image(png_buf, caption=f"عرض مضبوط ≈ {width_in:.2f}″ | ارتفاع ≈ {height_in:.2f}″ | mw≈{mw_used:.3f} مم", use_container_width=True)
+            st.download_button("⬇️ تحميل PNG", data=png_buf, file_name="code128.png", mime="image/png")
+
+            st.success("جاهز للطباعة. تأكد أن إعداد الطابعة على 100% بدون Fit to page.")
+        except Exception as e:
+            st.error(f"تعذّر الإنشاء: {e}")
