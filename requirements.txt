@@ -1,0 +1,3 @@
+streamlit>=1.36
+python-barcode>=0.15.1
+Pillow>=10.0
