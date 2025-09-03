@@ -2,9 +2,11 @@
 import re
 from io import BytesIO
 import streamlit as st
+from PIL import Image
 from barcode import Code128
 from barcode.writer import ImageWriter
 
+# إعداد الصفحة
 st.set_page_config(page_title="مولّد Code-128 (مطابق جرير)", page_icon="🔖", layout="centered")
 st.markdown("<h1 style='text-align:right'>مولّد <b>Code-128</b> مطابق لقياس جرير</h1>", unsafe_allow_html=True)
 
@@ -13,14 +15,12 @@ ARABIC_DIGITS = str.maketrans("٠١٢٣٤٥٦٧٨٩", "0123456789")
 
 def sanitize_ascii(s: str) -> str:
     s = (s or "").translate(ARABIC_DIGITS)
-    # remove bidi/hidden control chars that cause duplicated digits
     bidi = r"\u200e\u200f\u202a-\u202e\u2066-\u2069\ufeff"
     s = re.sub(f"[{bidi}]", "", s)
     s = "".join(ch for ch in s if ord(ch) < 128)
     return s.strip()
 
 def fnum(x, default=0.0) -> float:
-    """coerce any value to float safely."""
     try:
         return float(x)
     except Exception:
@@ -29,21 +29,8 @@ def fnum(x, default=0.0) -> float:
 def inches_to_mm(x) -> float:
     return fnum(x) * 25.4
 
-def safe_calculate_total_width_mm(writer: ImageWriter, code_obj, module_width_mm, quiet_mm) -> float:
-    """Support both signatures of calculate_size; always return float width incl. quiet zone."""
-    fullcode = code_obj.get_fullcode()
-    mw = fnum(module_width_mm)
-    qz = fnum(quiet_mm)
-    try:
-        # newer signature: (fullcode, module_width, quiet_zone)
-        w_mm, _ = writer.calculate_size(fullcode, mw, qz)
-        return fnum(w_mm)
-    except TypeError:
-        # older signature: (fullcode, module_width) -> add quiet zone manually
-        w_mm, _ = writer.calculate_size(fullcode, mw)
-        return fnum(w_mm) + qz * 2.0
-
-def render_png(data: str, dpi, module_width_mm, module_height_mm, quiet_mm) -> BytesIO:
+def render_png_bytes(data: str, dpi, module_width_mm, module_height_mm, quiet_mm) -> bytes:
+    """يرسم الباركود ويرجع PNG bytes."""
     writer = ImageWriter()
     opts = {
         "write_text": False,
@@ -56,45 +43,53 @@ def render_png(data: str, dpi, module_width_mm, module_height_mm, quiet_mm) -> B
     }
     code = Code128(data, writer=writer)
     buf = BytesIO()
-    code.write(buf, opts)
-    buf.seek(0)
-    return buf
+    code.write(buf, opts)  # PNG
+    return buf.getvalue()
+
+def measure_width_mm_via_render(data: str, dpi, module_width_mm, module_height_mm, quiet_mm) -> float:
+    """نقيس العرض الحقيقي عبر فتح الصورة وقراءة عدد البكسلات."""
+    png_bytes = render_png_bytes(data, dpi, module_width_mm, module_height_mm, quiet_mm)
+    with Image.open(BytesIO(png_bytes)) as im:
+        px_w = im.size[0]
+    # تحويل بكسل -> إنش -> مم
+    return (px_w / fnum(dpi)) * 25.4
 
 def fit_width_mm(data: str, target_width_mm, dpi, height_mm, quiet_mm,
-                 mw_low=0.02, mw_high=0.8, tol=0.02):
-    """Binary-search module_width so final width == target."""
+                 mw_low=0.01, mw_high=1.00, tol_mm=0.02, max_iter=40):
+    """
+    نعدّل module_width بالـ binary search مع قياس فعلي بالصورة حتى يطابق العرض المطلوب.
+    """
     data = sanitize_ascii(data)
     if not data:
         raise ValueError("النص بعد التنقية فارغ.")
 
-    writer = ImageWriter()
-    code = Code128(data, writer=writer)
-
-    low, high = fnum(mw_low), fnum(mw_high)
     target = fnum(target_width_mm)
-    qz = fnum(quiet_mm)
+    low, high = fnum(mw_low), fnum(mw_high)
     best_mw, best_err = None, 1e9
 
-    # tighten search
-    while (high - low) > 1e-5:
+    for _ in range(max_iter):
         mid = (low + high) / 2.0
-        total_w_mm = safe_calculate_total_width_mm(writer, code, mid, qz)
-        err = total_w_mm - target
+        actual_mm = measure_width_mm_via_render(data, dpi, mid, height_mm, quiet_mm)
+        err = actual_mm - target
 
         if abs(err) < best_err:
             best_err, best_mw = abs(err), mid
 
-        if err > 0:
-            high = mid    # too wide -> shrink
-        else:
-            low = mid     # too narrow -> enlarge
-
-        if abs(err) <= fnum(tol):
+        if abs(err) <= fnum(tol_mm):
             best_mw = mid
             break
 
-    png_buf = render_png(data, dpi, best_mw, fnum(height_mm), qz)
-    return png_buf, best_mw, data
+        if err > 0:
+            high = mid      # الصورة أعرض من المطلوب → صغّر module_width
+        else:
+            low = mid       # الصورة أضيق من المطلوب → كبّر module_width
+
+        if (high - low) < 1e-5:
+            break
+
+    # إنشاء الصورة النهائية بالعرض المضبوط
+    png_bytes = render_png_bytes(data, dpi, best_mw, height_mm, quiet_mm)
+    return png_bytes, best_mw, data
 
 # ---------- UI ----------
 with st.container(border=True):
@@ -116,16 +111,16 @@ with st.container(border=True):
             target_w_mm = inches_to_mm(width_in)
             height_mm   = inches_to_mm(height_in)
 
-            png_buf, mw_used, used_data = fit_width_mm(
+            png_bytes, mw_used, used_data = fit_width_mm(
                 clean, target_w_mm, dpi, height_mm, quiet_mm
             )
 
-            # expected pixel dims (for sanity check at printer dialog)
+            # أبعاد البكسل المتوقعة (للتأكد في الطابعة)
             px_w = int(round((target_w_mm / 25.4) * fnum(dpi)))
             px_h = int(round((height_mm   / 25.4) * fnum(dpi)))
 
-            st.image(png_buf, caption=f"عرض مضبوط ≈ {fnum(width_in):.2f}″ | ارتفاع ≈ {fnum(height_in):.2f}″ | mw≈{fnum(mw_used):.3f} مم", use_container_width=True)
-            st.download_button("⬇️ تحميل PNG", data=png_buf, file_name="code128.png", mime="image/png")
-            st.success(f"جاهز للطباعة 100% بدون Fit to page. الأبعاد المتوقعة عند {dpi} DPI ≈ {px_w}×{px_h} بكسل.")
+            st.image(png_bytes, caption=f"عرض مضبوط ≈ {fnum(width_in):.2f}″ | ارتفاع ≈ {fnum(height_in):.2f}″ | mw≈{fnum(mw_used):.3f} مم", use_container_width=True)
+            st.download_button("⬇️ تحميل PNG", data=png_bytes, file_name="code128.png", mime="image/png")
+            st.success(f"جاهز للطباعة 100% بدون Fit to page. الأبعاد عند {dpi} DPI ≈ {px_w}×{px_h} بكسل.")
         except Exception as e:
             st.error(f"تعذّر الإنشاء: {e}")
