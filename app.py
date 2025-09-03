@@ -8,17 +8,15 @@ from PIL import Image
 from barcode import Code128
 from barcode.writer import ImageWriter
 
-# ---------------- إعداد عام ----------------
 st.set_page_config(page_title="حاسبة + QR + Code128", page_icon="💰", layout="centered")
 st.title("💰 حاسبة الضريبة + مولّد QR (ZATCA) + باركود Code-128")
 
-# مفاتيح حالة مشتركة
+# حالة مشتركة لإرسال قيم الحاسبة
 st.session_state.setdefault("push_total", None)
 st.session_state.setdefault("push_vat", None)
 
-# ---------------- قسم 1: حاسبة الضريبة ----------------
+# ---------------- حاسبة الضريبة ----------------
 st.header("📊 حاسبة الضريبة")
-
 colA, colB = st.columns(2)
 with colA:
     total_incl = st.number_input("المبلغ شامل الضريبة", min_value=0.0, step=0.01)
@@ -40,9 +38,9 @@ with c2:
         ta = round(total_incl - bt, 2) if total_incl and rate else 0.0
         st.session_state.push_total = round(total_incl or 0.0, 2)
         st.session_state.push_vat = round(ta or 0.0, 2)
-        st.success("تم إرسال الإجمالي والضريبة إلى قسم QR ✅")
+        st.success("تم الإرسال ✅")
 
-# ---------------- قسم 2: مولّد QR ZATCA ----------------
+# ---------------- مولّد QR ZATCA ----------------
 st.header("🔖 مولّد رمز QR (ZATCA)")
 
 def _pref(key, fallback):
@@ -53,11 +51,11 @@ seller_name = st.text_input("اسم البائع")
 total = st.number_input("الإجمالي (شامل)", min_value=0.0, step=0.01, value=_pref("push_total", 0.0))
 vat_only = st.number_input("الضريبة", min_value=0.0, step=0.01, value=_pref("push_vat", 0.0))
 
-# بدائل متوافقة مع جميع الإصدارات: تاريخ + وقت
+# بدّلنا datetime_input -> date_input + time_input مع step=60 ثانية
 today = date.today()
-now_t = datetime.now().time()
+now_t = datetime.now().time().replace(second=0, microsecond=0)
 d_val = st.date_input("التاريخ", value=today)
-t_val = st.time_input("الوقت", value=now_t, step=1)  # step=1 ثانية
+t_val = st.time_input("الوقت", value=now_t, step=60)  # ✅ دقيقة واحدة كحدّ أدنى
 
 def tlv(tag, value: str) -> bytes:
     vb = value.encode("utf-8")
@@ -76,14 +74,14 @@ def to_zatca_base64(seller, vat, dt_iso, total_val, vat_val):
 if st.button("إنشاء رمز QR"):
     clean_vat = re.sub(r"\D", "", vat_number or "")
     if len(clean_vat) != 15:
-        st.error("الرقم الضريبي يجب أن يكون 15 رقمًا بالضبط.")
+        st.error("الرقم الضريبي لازم يكون 15 رقم.")
     elif not seller_name:
         st.error("أدخل اسم البائع.")
     elif total <= 0 or vat_only < 0:
-        st.error("أدخل الإجمالي والضريبة (الضريبة يمكن أن تكون 0.00).")
+        st.error("أدخل الإجمالي والضريبة.")
     else:
-        # دمج التاريخ والوقت → UTC بصيغة Z
-        local_dt = datetime.combine(d_val, t_val)
+        # ندمج التاريخ والوقت ونحوّل إلى UTC بصيغة Z (ثواني = 0)
+        local_dt = datetime.combine(d_val, t_val.replace(second=0, microsecond=0))
         iso = local_dt.astimezone(timezone.utc).strftime("%Y-%m-%dT%H:%M:%SZ")
 
         b64 = to_zatca_base64(seller_name, clean_vat, iso, total, vat_only)
@@ -95,19 +93,15 @@ if st.button("إنشاء رمز QR"):
         st.download_button("⬇️ تحميل QR", buf.getvalue(), file_name="zatca_qr.png", mime="image/png")
         st.code(b64, language="text")
 
-# ---------------- قسم 3: باركود Code-128 (بدون نص سفلي) ----------------
+# ---------------- باركود Code-128 (بدون نص سفلي) ----------------
 st.header("🧾 مولّد باركود Code-128 (بدون نص سفلي)")
 
-# مقاس افتراضي (يمكنك تعديله هنا)
-WIDTH_IN  = 1.86
-HEIGHT_IN = 0.28
-DPI       = 600
-QUIET_MM  = 0.0  # بدون هوامش خارجية
+# مقاس افتراضي (جرير)
+WIDTH_IN, HEIGHT_IN, DPI, QUIET_MM = 1.86, 0.28, 600, 0.0
 
 def inches_to_mm(x): return float(x) * 25.4
 def px_from_in(inches, dpi): return int(round(float(inches) * int(dpi)))
 
-# تنظيف النص لمنع مشاكل RTL/محارف خفية
 ARABIC_DIGITS = str.maketrans("٠١٢٣٤٥٦٧٨٩", "0123456789")
 def sanitize(s: str) -> str:
     s = (s or "").translate(ARABIC_DIGITS)
@@ -117,10 +111,10 @@ def sanitize(s: str) -> str:
 def render_barcode_png_bytes(data: str) -> bytes:
     writer = ImageWriter()
     opts = {
-        "write_text": False,                         # بدون الرقم أسفل الباركود
+        "write_text": False,
         "dpi": int(DPI),
-        "module_height": inches_to_mm(HEIGHT_IN),    # ارتفاع الأشرطة بالملّيمتر
-        "quiet_zone": float(QUIET_MM),               # بدون هامش خارجي
+        "module_height": inches_to_mm(HEIGHT_IN),
+        "quiet_zone": float(QUIET_MM),
         "background": "white",
         "foreground": "black",
     }
@@ -129,7 +123,6 @@ def render_barcode_png_bytes(data: str) -> bytes:
     return buf.getvalue()
 
 def resize_to_exact(png_bytes: bytes, target_w_px: int, target_h_px: int) -> bytes:
-    # يملأ الصورة بالكامل بدون Padding (تكبير/تصغير أقرب-nearest لحفاظ الحدة)
     with Image.open(BytesIO(png_bytes)) as im:
         resized = im.resize((target_w_px, target_h_px), Image.NEAREST)
         out = BytesIO(); resized.save(out, format="PNG", dpi=(DPI, DPI))
@@ -148,6 +141,6 @@ if st.button("إنشاء الكود 128"):
             final_png = resize_to_exact(raw_png, target_w_px, target_h_px)
             st.image(final_png, caption=f"{WIDTH_IN}×{HEIGHT_IN} inch @ {DPI} DPI")
             st.download_button("⬇️ تحميل Code-128", final_png, file_name="code128.png", mime="image/png")
-            st.success("الكود يملأ الصورة بالكامل. عند الطباعة: Scale = 100% وألغِ Fit to page.")
+            st.success("الطباعة على 100% وبدون Fit to page.")
         except Exception as e:
             st.error(f"تعذّر الإنشاء: {e}")
