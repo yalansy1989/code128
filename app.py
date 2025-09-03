@@ -1,21 +1,16 @@
 # -*- coding: utf-8 -*-
-# مولّد Code-128 مضبوط على قياس جرير (عرض/ارتفاع بالبوصة)، PNG عالي الدقة
-
 import re
 from io import BytesIO
 import streamlit as st
 from barcode import Code128
 from barcode.writer import ImageWriter
 
-# ---- إعداد الصفحة ----
 st.set_page_config(page_title="مولّد Code-128 (مطابق جرير)", page_icon="🔖", layout="centered")
 st.markdown("<h1 style='text-align:right'>مولّد <b>Code-128</b> مطابق لقياس جرير</h1>", unsafe_allow_html=True)
 
-# ---- أدوات مساعدة ----
 ARABIC_DIGITS = str.maketrans("٠١٢٣٤٥٦٧٨٩", "0123456789")
 
 def sanitize_ascii(s: str) -> str:
-    """تحويل الأرقام العربية → إنجليزية + إزالة محارف الاتجاه/التحكم الخفية، وإبقاء ASCII فقط."""
     s = s.translate(ARABIC_DIGITS)
     bidi = r"\u200e\u200f\u202a-\u202e\u2066-\u2069\ufeff"
     s = re.sub(f"[{bidi}]", "", s)
@@ -26,14 +21,13 @@ def inches_to_mm(x: float) -> float:
     return x * 25.4
 
 def render_png(data: str, dpi: int, module_width_mm: float, module_height_mm: float, quiet_mm: float) -> BytesIO:
-    """يرسم الباركود كـ PNG في الذاكرة."""
     writer = ImageWriter()
     opts = {
-        "write_text": False,             # بدون الرقم أسفل الباركود
+        "write_text": False,
         "dpi": dpi,
-        "module_width": module_width_mm, # عرض أصغر شريط (مم)
-        "module_height": module_height_mm,  # ارتفاع الأشرطة (مم)
-        "quiet_zone": quiet_mm,          # هامش صامت (مم) يضاف يمين/يسار
+        "module_width": module_width_mm,
+        "module_height": module_height_mm,
+        "quiet_zone": quiet_mm,
         "background": "white",
         "foreground": "black",
     }
@@ -45,10 +39,6 @@ def render_png(data: str, dpi: int, module_width_mm: float, module_height_mm: fl
 
 def fit_width_mm(data: str, target_width_mm: float, dpi: int, height_mm: float, quiet_mm: float,
                  mw_low=0.02, mw_high=0.8, tol=0.02):
-    """
-    نضبط module_width بالـ binary search حتى يساوي العرض الكلي المحسوب من المكتبة target_width_mm تقريبًا.
-    tol = سماحية الخطأ (مم). 0.02 مم كافية للطباعة.
-    """
     data = sanitize_ascii(data)
     if not data:
         raise ValueError("النص بعد التنقية فارغ.")
@@ -61,18 +51,21 @@ def fit_width_mm(data: str, target_width_mm: float, dpi: int, height_mm: float, 
 
     while high - low > 1e-4:
         mid = (low + high) / 2.0
-        # ملاحظة مهمة: calculate_size تقبل (fullcode, module_width, quiet_zone)
+        # حساب العرض الحقيقي بدون quiet
         fullcode = code.get_fullcode()
-        total_w_mm, _ = writer.calculate_size(fullcode, mid, quiet_mm)
+        total_w_mm, _ = writer.calculate_size(fullcode, mid)
+        # نضيف الهامش يمين + يسار
+        total_w_mm += quiet_mm * 2
+
         err = total_w_mm - target_width_mm
 
         if abs(err) < best_err:
             best_err, best_mw = abs(err), mid
 
         if err > 0:
-            high = mid  # العرض أكبر من المطلوب → صغّر module_width
+            high = mid
         else:
-            low = mid   # العرض أصغر من المطلوب → كبّر module_width
+            low = mid
 
         if abs(err) <= tol:
             best_mw = mid
@@ -96,7 +89,7 @@ with st.container(border=True):
     clean = sanitize_ascii(raw)
     st.caption(f"النص بعد التنقية: `{clean}`")
 
-    if st.button("إنشاء الكود", use_container_width=False):
+    if st.button("إنشاء الكود"):
         try:
             target_w_mm = inches_to_mm(width_in)
             height_mm   = inches_to_mm(height_in)
