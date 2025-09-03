@@ -7,22 +7,19 @@ from decimal import Decimal, ROUND_HALF_UP, InvalidOperation
 import streamlit as st
 import qrcode
 from PIL import Image
-import cv2  # للتحقق من QR عبر الصورة
-
 from barcode import Code128
 from barcode.writer import ImageWriter
 
-# ---------------- إعداد عام ----------------
-st.set_page_config(page_title="حاسبة + ZATCA QR + تحقق + Code128", page_icon="💰", layout="centered")
-st.title("💰 حاسبة الضريبة + مولّد QR (ZATCA) + تحقّق تلقائي + باركود Code-128")
+# ================= إعداد عام =================
+st.set_page_config(page_title="حاسبة + ZATCA + تحقق + Code128", page_icon="💰", layout="centered")
+st.title("💰 حاسبة الضريبة + مولّد QR (ZATCA) + تحقّق Base64 + باركود Code-128")
 
 # حالة مشتركة لإرسال قيم الحاسبة
 st.session_state.setdefault("push_total", None)
 st.session_state.setdefault("push_vat", None)
 
-# ============================ قسم 1: حاسبة الضريبة ============================
+# =============== قسم 1: حاسبة الضريبة ===============
 st.header("📊 حاسبة الضريبة")
-
 colA, colB = st.columns(2)
 with colA:
     total_incl = st.number_input("المبلغ شامل الضريبة", min_value=0.0, step=0.01)
@@ -46,12 +43,11 @@ with c2:
         st.session_state.push_vat = round(ta or 0.0, 2)
         st.success("تم الإرسال ✅")
 
-# ============================ أدوات ZATCA المعيارية ============================
+# =============== أدوات ZATCA المعيارية ===============
 def _clean_vat(v: str) -> str:
     return re.sub(r"\D", "", v or "")
 
 def _fmt2(x: str) -> str:
-    """تثبيت رقمين عشريين بنقطة وبـ ROUND_HALF_UP"""
     try:
         q = Decimal(x)
     except InvalidOperation:
@@ -66,7 +62,7 @@ def _iso_utc(dt_date: date, dt_time: time) -> str:
 def _tlv(tag: int, value: str) -> bytes:
     vb = value.encode("utf-8")
     if len(vb) > 255:
-        raise ValueError("قيمة TLV أطول من 255 بايت (غير مسموح في مرحلة 1).")
+        raise ValueError("قيمة TLV أطول من 255 بايت (غير مسموح في المرحلة 1).")
     return bytes([tag, len(vb)]) + vb
 
 def build_zatca_base64(seller: str, vat: str, dt_iso: str, total_s: str, vat_s: str) -> str:
@@ -80,50 +76,33 @@ def build_zatca_base64(seller: str, vat: str, dt_iso: str, total_s: str, vat_s: 
     return base64.b64encode(payload).decode("ascii")
 
 def parse_tlv(payload: bytes) -> dict:
-    """تفكيك TLV → dict مع الحقول 1..5"""
-    out = {}
-    i = 0
-    while i + 2 <= len(payload):
+    out, i, n = {}, 0, len(payload)
+    while i + 2 <= n:
         tag = payload[i]; ln = payload[i+1]; i += 2
-        if i + ln > len(payload):  # حماية
-            break
-        val = payload[i:i+ln]; i += ln
-        out[tag] = val.decode("utf-8", errors="replace")
+        if i + ln > n: break
+        out[tag] = payload[i:i+ln].decode("utf-8", errors="replace")
+        i += ln
     return out
 
 def validate_zatca_fields(fields: dict) -> dict:
-    """فحوصات سريعة وفق المواصفة"""
     verdict = {}
-
-    # 1- اسم البائع
     verdict["seller_name"] = {"value": fields.get(1, ""), "ok": bool(fields.get(1))}
-
-    # 2- الرقم الضريبي
     vat = _clean_vat(fields.get(2, ""))
     verdict["vat"] = {"value": vat, "ok": len(vat) == 15}
-
-    # 3- التاريخ ISO8601Z
     ts = fields.get(3, "")
     iso_ok = bool(re.fullmatch(r"\d{4}-\d{2}-\d{2}T\d{2}:\d{2}:\d{2}Z", ts))
     verdict["timestamp"] = {"value": ts, "ok": iso_ok}
-
-    # 4- الإجمالي
     try:
-        tot = Decimal(fields.get(4, "0"))
-        verdict["total"] = {"value": f"{tot:.2f}", "ok": True}
+        tot = Decimal(fields.get(4, "0")); verdict["total"] = {"value": f"{tot:.2f}", "ok": True}
     except InvalidOperation:
         verdict["total"] = {"value": fields.get(4, ""), "ok": False}
-
-    # 5- الضريبة
     try:
-        vat_amt = Decimal(fields.get(5, "0"))
-        verdict["vat_amount"] = {"value": f"{vat_amt:.2f}", "ok": True}
+        vamt = Decimal(fields.get(5, "0")); verdict["vat_amount"] = {"value": f"{vamt:.2f}", "ok": True}
     except InvalidOperation:
         verdict["vat_amount"] = {"value": fields.get(5, ""), "ok": False}
-
     return verdict
 
-# ============================ قسم 2: مولّد ZATCA QR ============================
+# =============== قسم 2: مولّد ZATCA QR ===============
 st.header("🔖 مولّد رمز QR (ZATCA) – TLV → Base64")
 
 vat_number = st.text_input("الرقم الضريبي (15 رقم)", max_chars=15)
@@ -134,7 +113,7 @@ vat_only = st.text_input("الضريبة", value=str(st.session_state.get("push_
 today = date.today()
 now_t = datetime.now().time().replace(second=0, microsecond=0)
 d_val = st.date_input("التاريخ", value=today)
-t_val = st.time_input("الوقت", value=now_t, step=60)  # دقيقة واحدة
+t_val = st.time_input("الوقت", value=now_t, step=60)
 
 if st.button("إنشاء رمز QR (ZATCA)"):
     vat = _clean_vat(vat_number)
@@ -146,7 +125,6 @@ if st.button("إنشاء رمز QR (ZATCA)"):
         iso = _iso_utc(d_val, t_val)
         total_str = _fmt2(total)
         vat_str   = _fmt2(vat_only)
-
         try:
             b64 = build_zatca_base64(seller_name.strip(), vat, iso, total_str, vat_str)
         except ValueError as e:
@@ -154,8 +132,6 @@ if st.button("إنشاء رمز QR (ZATCA)"):
         else:
             st.subheader("Base64 الناتج")
             st.code(b64, language="text")
-
-            # توليد صورة QR من نفس الـ Base64
             qr = qrcode.QRCode(box_size=8, border=2)
             qr.add_data(b64); qr.make(fit=True)
             img = qr.make_image(fill_color="black", back_color="white")
@@ -163,42 +139,14 @@ if st.button("إنشاء رمز QR (ZATCA)"):
             st.image(buf.getvalue(), caption="رمز QR ZATCA")
             st.download_button("⬇️ تحميل QR", buf.getvalue(), file_name="zatca_qr.png", mime="image/png")
 
-# ============================ قسم 3: تحقّق تلقائي من قارئ ============================
-st.header("🛡️ تحقّق تلقائي من رمز ZATCA")
+# =============== قسم 3: تحقّق Base64 (بدون cv2) ===============
+st.header("🛡️ تحقّق تلقائي من ZATCA (بالـ Base64)")
 
-tab1, tab2 = st.tabs(["📷 رفع صورة QR", "📋 لصق Base64"])
-with tab1:
-    up = st.file_uploader("ارفع صورة للـ QR (PNG/JPG)", type=["png", "jpg", "jpeg"])
-    if up is not None:
-        # نقرأ الصورة بـ OpenCV ونفكّ QR
-        image_bytes = up.read()
-        npbuf = np.frombuffer(image_bytes, dtype="uint8")  # numpy سيأتي من cv2
-        img = cv2.imdecode(npbuf, cv2.IMREAD_GRAYSCALE)
-        detector = cv2.QRCodeDetector()
-        data, pts, _ = detector.detectAndDecode(img)
-        if not data:
-            st.error("تعذّر قراءة QR من الصورة.")
-        else:
-            st.success("تمت قراءة محتوى QR.")
-            pasted_b64 = data.strip()
-            st.code(pasted_b64, language="text")
+tab_a, tab_b = st.tabs(["📋 لصق Base64", "📄 رفع ملف TXT (اختياري)"])
 
-            # نحاول فك Base64 → TLV
-            try:
-                payload = base64.b64decode(pasted_b64, validate=True)
-                fields = parse_tlv(payload)
-                verdict = validate_zatca_fields(fields)
-                st.subheader("الحقول المفكّكة")
-                st.json({k: v["value"] for k, v in verdict.items()})
-                # ملخص صلاحية
-                ok_all = all(v["ok"] for v in verdict.values())
-                st.success("✅ صالح وفق المواصفة." if ok_all else "⚠️ بعض الحقول غير صحيحة.")
-            except Exception as e:
-                st.error(f"Base64 غير صالح أو TLV غير صحيح: {e}")
-
-with tab2:
-    pasted_b64 = st.text_area("الصق Base64 هنا")
-    if st.button("تحقّق"):
+with tab_a:
+    pasted_b64 = st.text_area("الصق هنا النص Base64 المقروء من القارئ")
+    if st.button("تحقّق من Base64"):
         try:
             payload = base64.b64decode((pasted_b64 or "").strip(), validate=True)
             fields = parse_tlv(payload)
@@ -206,11 +154,26 @@ with tab2:
             st.subheader("الحقول المفكّكة")
             st.json({k: v["value"] for k, v in verdict.items()})
             ok_all = all(v["ok"] for v in verdict.values())
-            st.success("✅ صالح وفق المواصفة." if ok_all else "⚠️ بعض الحقول غير صحيحة.")
+            st.success("✅ صالح وفق مواصفة ZATCA." if ok_all else "⚠️ بعض الحقول غير صحيحة.")
         except Exception as e:
             st.error(f"Base64 غير صالح أو TLV غير صحيح: {e}")
 
-# ============================ قسم 4: باركود Code-128 (جرير) ============================
+with tab_b:
+    up = st.file_uploader("ارفع ملف TXT يحتوي الـ Base64 فقط", type=["txt"])
+    if up is not None and st.button("تحقّق من الملف"):
+        try:
+            pasted_b64 = up.read().decode("utf-8").strip()
+            payload = base64.b64decode(pasted_b64, validate=True)
+            fields = parse_tlv(payload)
+            verdict = validate_zatca_fields(fields)
+            st.subheader("الحقول المفكّكة")
+            st.json({k: v["value"] for k, v in verdict.items()})
+            ok_all = all(v["ok"] for v in verdict.values())
+            st.success("✅ صالح وفق مواصفة ZATCA." if ok_all else "⚠️ بعض الحقول غير صحيحة.")
+        except Exception as e:
+            st.error(f"لم أستطع قراءة/تحليل الملف: {e}")
+
+# =============== قسم 4: باركود Code-128 (بدون نص سفلي) ===============
 st.header("🧾 مولّد باركود Code-128 (بدون نص سفلي)")
 
 # مقاس افتراضي (جرير)
@@ -219,7 +182,6 @@ WIDTH_IN, HEIGHT_IN, DPI, QUIET_MM = 1.86, 0.28, 600, 0.0
 def inches_to_mm(x): return float(x) * 25.4
 def px_from_in(inches, dpi): return int(round(float(inches) * int(dpi)))
 
-# تنظيف نص code128
 ARABIC_DIGITS = str.maketrans("٠١٢٣٤٥٦٧٨٩", "0123456789")
 def sanitize(s: str) -> str:
     s = (s or "").translate(ARABIC_DIGITS)
