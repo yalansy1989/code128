@@ -1,7 +1,7 @@
 # -*- coding: utf-8 -*-
 import re, base64
 from io import BytesIO
-from datetime import datetime, timezone
+from datetime import datetime, date, time, timezone
 import streamlit as st
 import qrcode
 from PIL import Image
@@ -13,11 +13,8 @@ st.set_page_config(page_title="حاسبة + QR + Code128", page_icon="💰", lay
 st.title("💰 حاسبة الضريبة + مولّد QR (ZATCA) + باركود Code-128")
 
 # مفاتيح حالة مشتركة
-for k, v in {
-    "push_total": None,
-    "push_vat": None,
-}.items():
-    st.session_state.setdefault(k, v)
+st.session_state.setdefault("push_total", None)
+st.session_state.setdefault("push_vat", None)
 
 # ---------------- قسم 1: حاسبة الضريبة ----------------
 st.header("📊 حاسبة الضريبة")
@@ -48,7 +45,6 @@ with c2:
 # ---------------- قسم 2: مولّد QR ZATCA ----------------
 st.header("🔖 مولّد رمز QR (ZATCA)")
 
-# قيم افتراضية من الحاسبة إن وُجدت
 def _pref(key, fallback):
     return st.session_state[key] if st.session_state.get(key) is not None else fallback
 
@@ -56,7 +52,12 @@ vat_number = st.text_input("الرقم الضريبي (15 رقم)", max_chars=15
 seller_name = st.text_input("اسم البائع")
 total = st.number_input("الإجمالي (شامل)", min_value=0.0, step=0.01, value=_pref("push_total", 0.0))
 vat_only = st.number_input("الضريبة", min_value=0.0, step=0.01, value=_pref("push_vat", 0.0))
-invoice_date = st.datetime_input("التاريخ والوقت", value=datetime.now())
+
+# بدائل متوافقة مع جميع الإصدارات: تاريخ + وقت
+today = date.today()
+now_t = datetime.now().time()
+d_val = st.date_input("التاريخ", value=today)
+t_val = st.time_input("الوقت", value=now_t, step=1)  # step=1 ثانية
 
 def tlv(tag, value: str) -> bytes:
     vb = value.encode("utf-8")
@@ -81,7 +82,10 @@ if st.button("إنشاء رمز QR"):
     elif total <= 0 or vat_only < 0:
         st.error("أدخل الإجمالي والضريبة (الضريبة يمكن أن تكون 0.00).")
     else:
-        iso = invoice_date.astimezone(timezone.utc).strftime("%Y-%m-%dT%H:%M:%SZ")
+        # دمج التاريخ والوقت → UTC بصيغة Z
+        local_dt = datetime.combine(d_val, t_val)
+        iso = local_dt.astimezone(timezone.utc).strftime("%Y-%m-%dT%H:%M:%SZ")
+
         b64 = to_zatca_base64(seller_name, clean_vat, iso, total, vat_only)
         qr = qrcode.QRCode(box_size=8, border=2)
         qr.add_data(b64); qr.make(fit=True)
@@ -91,10 +95,10 @@ if st.button("إنشاء رمز QR"):
         st.download_button("⬇️ تحميل QR", buf.getvalue(), file_name="zatca_qr.png", mime="image/png")
         st.code(b64, language="text")
 
-# ---------------- قسم 3: باركود Code-128 (مضبوط) ----------------
+# ---------------- قسم 3: باركود Code-128 (بدون نص سفلي) ----------------
 st.header("🧾 مولّد باركود Code-128 (بدون نص سفلي)")
 
-# مقاس افتراضي (يمكنك تعديله هنا لو احتجت)
+# مقاس افتراضي (يمكنك تعديله هنا)
 WIDTH_IN  = 1.86
 HEIGHT_IN = 0.28
 DPI       = 600
@@ -121,16 +125,14 @@ def render_barcode_png_bytes(data: str) -> bytes:
         "foreground": "black",
     }
     code = Code128(data, writer=writer)
-    buf = BytesIO()
-    code.write(buf, opts)
+    buf = BytesIO(); code.write(buf, opts)
     return buf.getvalue()
 
 def resize_to_exact(png_bytes: bytes, target_w_px: int, target_h_px: int) -> bytes:
-    # يملأ الصورة بالكامل بدون Padding (قد يغيّر سماكات البارات خطيًا—NEAREST يحافظ على الحدة)
+    # يملأ الصورة بالكامل بدون Padding (تكبير/تصغير أقرب-nearest لحفاظ الحدة)
     with Image.open(BytesIO(png_bytes)) as im:
         resized = im.resize((target_w_px, target_h_px), Image.NEAREST)
-        out = BytesIO()
-        resized.save(out, format="PNG", dpi=(DPI, DPI))
+        out = BytesIO(); resized.save(out, format="PNG", dpi=(DPI, DPI))
         return out.getvalue()
 
 code128_val = st.text_input("أدخل الرقم/النص (Code-128)")
@@ -146,6 +148,6 @@ if st.button("إنشاء الكود 128"):
             final_png = resize_to_exact(raw_png, target_w_px, target_h_px)
             st.image(final_png, caption=f"{WIDTH_IN}×{HEIGHT_IN} inch @ {DPI} DPI")
             st.download_button("⬇️ تحميل Code-128", final_png, file_name="code128.png", mime="image/png")
-            st.success("الكود يملأ الصورة بالكامل. في الطباعة: Scale = 100%، ألغِ Fit to page.")
+            st.success("الكود يملأ الصورة بالكامل. عند الطباعة: Scale = 100% وألغِ Fit to page.")
         except Exception as e:
             st.error(f"تعذّر الإنشاء: {e}")
