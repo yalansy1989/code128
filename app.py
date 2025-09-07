@@ -247,3 +247,4 @@ if st.button("إنشاء الكود 128"):
             st.success("الطباعة: Scale = 100%، بدون Fit to page.")
         except Exception as e:
             st.error(f"تعذّر الإنشاء: {e}")
+
