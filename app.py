@@ -7,7 +7,7 @@ from decimal import Decimal, ROUND_HALF_UP, InvalidOperation
 import streamlit as st
 import qrcode
 from qrcode.constants import ERROR_CORRECT_M
-from PIL import Image, ImageOps
+from PIL import Image
 from barcode import Code128
 from barcode.writer import ImageWriter
 
@@ -194,10 +194,10 @@ with st.expander("📁 حفظ/تحميل دفتر الأسماء"):
         except Exception as e:
             st.error(f"فشل الاستيراد: {e}")
 
-# ================= قسم 3: باركود Code-128 (بدون نص وبدون هوامش) =================
-st.header("🧾 مولّد باركود Code-128 (كامل بدون هوامش)")
+# ================= قسم 3: باركود Code-128 (مقاسات مضبوطة) =================
+st.header("🧾 مولّد باركود Code-128 (1.86 × 0.28 inch @ 600 DPI)")
 
-# مقاس افتراضي (جرير)
+# المقاسات المطلوبة
 WIDTH_IN, HEIGHT_IN, DPI = 1.86, 0.28, 600
 
 def inches_to_mm(x): return float(x) * 25.4
@@ -214,7 +214,8 @@ def render_barcode_png_bytes(data: str) -> bytes:
     opts = {
         "write_text": False,
         "dpi": int(DPI),
-        "module_height": inches_to_mm(HEIGHT_IN),
+        # نخلي الطول كبير ثم نعيد ضبطه
+        "module_height": 15.0,    # مم (~0.59 inch)
         "quiet_zone": 0.0,
         "text_distance": 0.0,
         "background": "white",
@@ -228,7 +229,7 @@ def render_barcode_png_bytes(data: str) -> bytes:
     # فتح الصورة
     img = Image.open(buf).convert("RGB")
 
-    # قص كل الهوامش البيضاء
+    # قص الهوامش البيضاء
     bbox = img.getbbox()
     if bbox:
         img = img.crop(bbox)
@@ -250,8 +251,8 @@ if st.button("إنشاء الكود 128"):
     else:
         try:
             final_png = render_barcode_png_bytes(clean)
-            st.image(final_png, caption=f"{WIDTH_IN}×{HEIGHT_IN} inch @ {DPI} DPI")
+            st.image(final_png, caption=f"{WIDTH_IN} × {HEIGHT_IN} inch @ {DPI} DPI")
             st.download_button("⬇️ تحميل Code-128", final_png, file_name="code128.png", mime="image/png")
-            st.success("الباركود جاهز بدون أي هوامش، للطباعة Scale=100%.")
+            st.success("تم إنشاء الباركود بالمقاسات الدقيقة (1.86 × 0.28 inch).")
         except Exception as e:
             st.error(f"تعذّر الإنشاء: {e}")
