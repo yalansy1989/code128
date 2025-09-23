@@ -195,10 +195,10 @@ with st.expander("📁 حفظ/تحميل دفتر الأسماء"):
             st.error(f"فشل الاستيراد: {e}")
 
 # ================= قسم 3: باركود Code-128 (مقاسات مضبوطة) =================
-st.header("🧾 مولّد باركود Code-128 (1.85 × 0.31 inch @ 600 DPI)")
+st.header("🧾 مولّد باركود Code-128 (1.86 × 0.31 inch @ 600 DPI)")
 
 # المقاسات المطلوبة
-WIDTH_IN, HEIGHT_IN, DPI = 1.85, 0.31, 600
+WIDTH_IN, HEIGHT_IN, DPI = 1.86, 0.31, 600
 
 def inches_to_mm(x): return float(x) * 25.4
 def px_from_in(inches, dpi): return int(round(float(inches) * int(dpi)))
@@ -249,6 +249,6 @@ if st.button("إنشاء الكود 128"):
             final_png = render_barcode_png_bytes(clean)
             st.image(final_png, caption=f"{WIDTH_IN} × {HEIGHT_IN} inch @ {DPI} DPI")
             st.download_button("⬇️ تحميل Code-128", final_png, file_name="code128.png", mime="image/png")
-            st.success("تم إنشاء الباركود بالمقاسات الدقيقة (1.85 × 0.31 inch).")
+            st.success("تم إنشاء الباركود بالمقاسات الدقيقة (1.86 × 0.31 inch).")
         except Exception as e:
             st.error(f"تعذّر الإنشاء: {e}")
