@@ -25,15 +25,21 @@ h1, h2, h3 { text-align:center; font-weight:700; }
 
 st.title("💰 حاسبة الضريبة + مولّد QR (ZATCA) + Code128 + PDF Metadata")
 
-# ================= حالة افتراضية ثابتة =================
-st.session_state.setdefault("qr_total", "0.00")
-st.session_state.setdefault("qr_vat", "0.00")
-st.session_state.setdefault("qr_date", date.today())
-st.session_state.setdefault("qr_time", datetime.now().time().replace(microsecond=0))
-st.session_state.setdefault("qr_vat_number", "")
-st.session_state.setdefault("qr_seller", "")
-# ثواني منفصلة لواجهة QR (يتم دمجها دائمًا داخل qr_time)
-st.session_state.setdefault("qr_secs", st.session_state["qr_time"].second)
+# ================= حالة افتراضية ثابتة (مرة واحدة فقط) =================
+if "qr_initialized" not in st.session_state:
+    now_time = datetime.now().time().replace(microsecond=0)
+    st.session_state.update({
+        "qr_total": "0.00",
+        "qr_vat": "0.00",
+        "qr_date": date.today(),
+        "qr_time": now_time,
+        "qr_vat_number": "",
+        "qr_seller": "",
+        # واجهة الوقت
+        "qr_time_hm": now_time.replace(second=0),
+        "qr_secs": now_time.second
+    })
+    st.session_state["qr_initialized"] = True
 
 # ================= أدوات مشتركة =================
 def _clean_vat(v: str) -> str: return re.sub(r"\D", "", v or "")
@@ -157,13 +163,13 @@ with c1:
             st.success(f"قبل الضريبة: {before:.2f} | الضريبة: {vat_amount:.2f}")
     with colB:
         if st.button("📤 إرسال القيم إلى مولّد QR"):
+            # تحديث الإجمالي والضريبة فقط — بدون أي مساس بالتاريخ/الوقت
             rate = tax_rate/100.0 if tax_rate else 0.0
             before = round(total_incl/(1+rate), 2) if total_incl and rate else 0.0
             vat_amount = round(total_incl - before, 2) if total_incl and rate else 0.0
             st.session_state["qr_total"] = f"{total_incl:.2f}"
             st.session_state["qr_vat"]   = f"{vat_amount:.2f}"
             st.toast("تم إرسال الإجمالي والضريبة إلى قسم مولّد QR ✅")
-            st.rerun()
 
 with c2:
     st.header("📑 PDF Metadata")
@@ -206,11 +212,12 @@ with c2:
             cre = st.session_state.get("/CreationDate", "")
             d, t = parse_display_dt(cre)
             if d and t:
-                st.session_state["qr_date"] = d
-                st.session_state["qr_time"] = t
-                st.session_state["qr_secs"] = t.second  # احفظ الثواني أيضاً
+                # حفظ نهائي لقيم التاريخ/الوقت في مفاتيح QR (لن تُمس لاحقًا)
+                st.session_state["qr_date"]    = d
+                st.session_state["qr_time"]    = t
+                st.session_state["qr_time_hm"] = t.replace(second=0)
+                st.session_state["qr_secs"]    = t.second
                 st.success("تم إرسال التاريخ والوقت إلى قسم مولّد QR ✅")
-                st.rerun()
             else:
                 st.error("صيغة CreationDate غير صحيحة. الصيغة: dd/mm/YYYY, HH:MM:SS")
 
@@ -238,27 +245,18 @@ with c3:
 with c4:
     st.header("🔖 مولّد QR (ZATCA)")
 
-    vat_input    = st.text_input("الرقم الضريبي (15 رقم)", key="qr_vat_number")
-    seller_input = st.text_input("اسم البائع", key="qr_seller")
+    st.text_input("الرقم الضريبي (15 رقم)", key="qr_vat_number")
+    st.text_input("اسم البائع", key="qr_seller")
+    st.text_input("الإجمالي (شامل)", key="qr_total")
+    st.text_input("الضريبة", key="qr_vat")
 
-    total_input  = st.text_input("الإجمالي (شامل)", key="qr_total")
-    tax_input    = st.text_input("الضريبة", key="qr_vat")
-
-    # وقت مع ثوانٍ: time_input بالدقائق + حقل ثوانٍ منفصل (Streamlit لا يسمح step<60)
-    # نضبط قيمة مرجعية لحقل الوقت بدون ثواني، ثم ندمجها مع حقل الثواني في كل مرة.
-    hm_time = st.time_input(
-        "الوقت (ساعة:دقيقة)",
-        key="qr_time_hm",
-        value=st.session_state["qr_time"].replace(second=0),
-        step=60  # أقل قيمة مسموحة من Streamlit
-    )
-    secs = st.number_input("الثواني", min_value=0, max_value=59, step=1, key="qr_secs", value=st.session_state.get("qr_secs", 0))
-
-    # ادمج ساعة/دقيقة + ثواني في qr_time واحفظ دائمًا
+    # واجهة الوقت: ساعة/دقيقة + ثوانٍ، ثم دمجها في qr_time
+    hm_time = st.time_input("الوقت (ساعة:دقيقة)", key="qr_time_hm", value=st.session_state["qr_time_hm"], step=60)
+    secs = st.number_input("الثواني", min_value=0, max_value=59, step=1, key="qr_secs", value=st.session_state["qr_secs"])
     st.session_state["qr_time"] = time(hm_time.hour, hm_time.minute, int(secs))
     st.caption(f"الوقت الحالي: {st.session_state['qr_time'].strftime('%H:%M:%S')}")
 
-    d_val = st.date_input("التاريخ", key="qr_date", value=st.session_state.get("qr_date", date.today()))
+    st.date_input("التاريخ", key="qr_date", value=st.session_state["qr_date"])
 
     if st.button("إنشاء رمز QR"):
         vclean = _clean_vat(st.session_state["qr_vat_number"])
@@ -266,11 +264,13 @@ with c4:
             st.error("الرقم الضريبي يجب أن يكون 15 رقمًا.")
         else:
             iso = _iso_utc(st.session_state["qr_date"], st.session_state["qr_time"])
-            b64 = build_zatca_base64(st.session_state["qr_seller"].strip(),
-                                     vclean,
-                                     iso,
-                                     _fmt2(st.session_state["qr_total"]),
-                                     _fmt2(st.session_state["qr_vat"]))
+            b64 = build_zatca_base64(
+                st.session_state["qr_seller"].strip(),
+                vclean,
+                iso,
+                _fmt2(st.session_state["qr_total"]),
+                _fmt2(st.session_state["qr_vat"])
+            )
             st.code(b64, language="text")
             img = make_qr(b64)
             st.image(img, caption="رمز QR ZATCA")
