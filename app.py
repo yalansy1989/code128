@@ -195,10 +195,10 @@ with st.expander("📁 حفظ/تحميل دفتر الأسماء"):
             st.error(f"فشل الاستيراد: {e}")
 
 # ================= قسم 3: باركود Code-128 (مقاسات مضبوطة) =================
-st.header("🧾 مولّد باركود Code-128 (1.86 × 0.28 inch @ 600 DPI)")
+st.header("🧾 مولّد باركود Code-128 (1.85 × 0.31 inch @ 600 DPI)")
 
 # المقاسات المطلوبة
-WIDTH_IN, HEIGHT_IN, DPI = 1.86, 0.28, 600
+WIDTH_IN, HEIGHT_IN, DPI = 1.85, 0.31, 600
 
 def inches_to_mm(x): return float(x) * 25.4
 def px_from_in(inches, dpi): return int(round(float(inches) * int(dpi)))
@@ -214,8 +214,7 @@ def render_barcode_png_bytes(data: str) -> bytes:
     opts = {
         "write_text": False,
         "dpi": int(DPI),
-        # نخلي الطول كبير ثم نعيد ضبطه
-        "module_height": 15.0,    # مم (~0.59 inch)
+        "module_height": 15.0,    # نخليه أطول ثم نعيد التحجيم
         "quiet_zone": 0.0,
         "text_distance": 0.0,
         "background": "white",
@@ -226,15 +225,12 @@ def render_barcode_png_bytes(data: str) -> bytes:
     code.write(buf, opts)
     buf.seek(0)
 
-    # فتح الصورة
     img = Image.open(buf).convert("RGB")
 
-    # قص الهوامش البيضاء
     bbox = img.getbbox()
     if bbox:
         img = img.crop(bbox)
 
-    # إعادة التحجيم للمقاس المطلوب
     target_w_px = px_from_in(WIDTH_IN, DPI)
     target_h_px = px_from_in(HEIGHT_IN, DPI)
     img = img.resize((target_w_px, target_h_px), Image.NEAREST)
@@ -253,6 +249,6 @@ if st.button("إنشاء الكود 128"):
             final_png = render_barcode_png_bytes(clean)
             st.image(final_png, caption=f"{WIDTH_IN} × {HEIGHT_IN} inch @ {DPI} DPI")
             st.download_button("⬇️ تحميل Code-128", final_png, file_name="code128.png", mime="image/png")
-            st.success("تم إنشاء الباركود بالمقاسات الدقيقة (1.86 × 0.28 inch).")
+            st.success("تم إنشاء الباركود بالمقاسات الدقيقة (1.85 × 0.31 inch).")
         except Exception as e:
             st.error(f"تعذّر الإنشاء: {e}")
