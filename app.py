@@ -8,7 +8,7 @@ from qrcode.constants import ERROR_CORRECT_M
 from PIL import Image
 from barcode import Code128
 from barcode.writer import ImageWriter
-from pypdf import PdfReader, PdfWriter
+from PyPDF2 import PdfReader, PdfWriter   # استخدم PyPDF2 لأنه مدعوم أكثر
 
 # ================= إعداد عام =================
 st.set_page_config(page_title="حاسبة الضريبة + QR + Code128 + PDF", page_icon="💰", layout="wide")
@@ -80,7 +80,6 @@ def make_qr_dense(b64_text: str, final_px: int = 300) -> bytes:
 
 # إعداد باركود Code128
 WIDTH_IN, HEIGHT_IN, DPI = 1.86, 0.31, 600
-def inches_to_mm(x): return float(x) * 25.4
 def px_from_in(inches, dpi): return int(round(float(inches) * int(dpi)))
 def render_barcode_png_bytes(data: str) -> bytes:
     writer = ImageWriter()
@@ -140,6 +139,12 @@ def update_pdf_metadata(pdf_file, new_metadata):
     except Exception as e:
         st.error(f"خطأ عند تحديث البيانات: {e}"); return None
 
+# --- Callback لتحديث CreationDate عند تغيير ModDate ---
+def update_creation_date_callback():
+    if st.session_state.get("sync_dates", True):  # فقط لو التحديث التلقائي مفعل
+        if "moddate_input" in st.session_state:
+            st.session_state.creationdate_input = st.session_state.moddate_input
+
 # ================= القسمين العلويين =================
 col1, col2 = st.columns(2)
 
@@ -197,18 +202,44 @@ with col4:
     st.markdown('<div class="card">', unsafe_allow_html=True)
     st.subheader("📝 أداة تعديل بيانات PDF Metadata")
     uploaded_file = st.file_uploader("قم بتحميل ملف PDF", type=["pdf"])
+
     if uploaded_file is not None:
         st.success("تم تحميل الملف بنجاح!")
+
         if "metadata" not in st.session_state:
             st.session_state.metadata = read_pdf_metadata(uploaded_file)
+
         if st.session_state.metadata:
+            st.subheader("بيانات التعريف الحالية")
+
+            # خيار تحديث تلقائي
+            st.checkbox("تحديث CreationDate تلقائياً مع ModDate", key="sync_dates", value=True)
+
             updated_metadata = {}
             for key, value in st.session_state.metadata.items():
                 display_key = key[1:] if key.startswith("/") else key
-                updated_metadata[key] = st.text_input(display_key, value=value, key=key)
-            if st.button("تحديث بيانات PDF"):
+
+                if key == "/ModDate":
+                    updated_metadata[key] = st.text_input(
+                        display_key,
+                        value=value,
+                        key="moddate_input",
+                        on_change=update_creation_date_callback
+                    )
+                elif key == "/CreationDate":
+                    updated_metadata[key] = st.text_input(
+                        display_key,
+                        value=st.session_state.get("creationdate_input", value),
+                        key="creationdate_input"
+                    )
+                else:
+                    updated_metadata[key] = st.text_input(display_key, value=value, key=key)
+
+            if st.button("تحديث بيانات التعريف وحفظ الملف"):
                 updated_pdf = update_pdf_metadata(uploaded_file, updated_metadata)
                 if updated_pdf:
-                    st.success("تم تحديث بيانات PDF بنجاح!")
+                    st.success("تم تحديث بيانات التعريف بنجاح!")
                     st.download_button("تحميل الملف المعدل", data=updated_pdf, file_name=uploaded_file.name)
+    else:
+        st.info("يرجى تحميل ملف PDF للبدء.")
     st.markdown('</div>', unsafe_allow_html=True)
