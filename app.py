@@ -46,7 +46,7 @@ def build_zatca_base64(seller, vat, dt_iso, total, vat_s):
     payload = b"".join([_tlv(1,seller), _tlv(2,vat), _tlv(3,dt_iso), _tlv(4,total), _tlv(5,vat_s)])
     return base64.b64encode(payload).decode("ascii")
 
-# ================= QR =================
+# ================= QR (صورة كثيفة) =================
 def make_qr(b64: str) -> bytes:
     qr = qrcode.QRCode(version=14, error_correction=ERROR_CORRECT_M, box_size=2, border=4)
     qr.add_data(b64); qr.make(fit=False)
@@ -99,9 +99,16 @@ def display_date_to_pdf_date(s):
     try: return datetime.strptime(s,"%d/%m/%Y, %H:%M:%S").strftime("D:%Y%m%d%H%M%S+03'00'")
     except: return s
 
+def parse_display_dt(s: str):
+    """ارجاع (date,time) من نص dd/mm/YYYY, HH:MM:SS"""
+    try:
+        dt = datetime.strptime(s.strip(), "%d/%m/%Y, %H:%M:%S")
+        return dt.date(), dt.time().replace(microsecond=0)
+    except Exception:
+        return None, None
+
 def read_meta(file):
     file.seek(0); r = PdfReader(file); md = r.metadata or {}
-    # ضم الحقول الأساسية + أي حقول إضافية موجودة في الملف
     keys = BASE_KEYS + [k for k in md.keys() if k not in BASE_KEYS]
     out = {}
     for k in keys:
@@ -119,37 +126,93 @@ def write_meta(file, new_md):
     w.add_metadata(final)
     out = io.BytesIO(); w.write(out); out.seek(0); return out
 
-# ================= الصف الأعلى: (حاسبة) + (QR) =================
+# =========================================================
+# الصف الأعلى: (يسار) الحاسبة  —  (يمين) تعديل Metadata  (تم النقل)
+# =========================================================
 c1, c2 = st.columns(2)
 
+# --------- الحاسبة ---------
 with c1:
     st.header("📊 حاسبة الضريبة")
     total_incl = st.number_input("المبلغ شامل الضريبة", min_value=0.0, step=0.01)
     tax_rate   = st.number_input("نسبة الضريبة (%)", min_value=1.0, max_value=100.0, value=15.0, step=0.01)
-    if st.button("احسب الآن"):
-        rate = tax_rate/100.0
-        before = round(total_incl/(1+rate), 2)
-        st.success(f"قبل الضريبة: {before:.2f} | الضريبة: {total_incl-before:.2f}")
 
+    colA, colB = st.columns(2)
+    with colA:
+        if st.button("احسب الآن"):
+            rate = tax_rate/100.0
+            before = round(total_incl/(1+rate), 2)
+            vat_amount = round(total_incl - before, 2)
+            st.success(f"قبل الضريبة: {before:.2f} | الضريبة: {vat_amount:.2f}")
+    with colB:
+        if st.button("📤 إرسال القيم إلى مولّد QR"):
+            rate = tax_rate/100.0 if tax_rate else 0.0
+            before = round(total_incl/(1+rate), 2) if total_incl and rate else 0.0
+            vat_amount = round(total_incl - before, 2) if total_incl and rate else 0.0
+            st.session_state["qr_total"] = f"{total_incl:.2f}"
+            st.session_state["qr_vat"]   = f"{vat_amount:.2f}"
+            st.toast("تم إرسال الإجمالي والضريبة إلى قسم مولّد QR ✅")
+            st.rerun()
+
+# --------- تعديل Metadata (نُقل للأعلى يمين) ---------
 with c2:
-    st.header("🔖 مولّد QR (ZATCA)")
-    vat    = st.text_input("الرقم الضريبي (15 رقم)")
-    seller = st.text_input("اسم البائع")
-    total  = st.text_input("الإجمالي (شامل)")
-    tax    = st.text_input("الضريبة")
-    d_val  = st.date_input("التاريخ", value=date.today())
-    t_val  = st.time_input("الوقت", value=datetime.now().time().replace(second=0, microsecond=0), step=60)
-    if st.button("إنشاء رمز QR"):
-        v = _clean_vat(vat)
-        if len(v) != 15: st.error("الرقم الضريبي يجب أن يكون 15 رقمًا.")
-        else:
-            b64 = build_zatca_base64(seller.strip(), v, _iso_utc(d_val, t_val), _fmt2(total), _fmt2(tax))
-            st.code(b64, language="text")
-            img = make_qr(b64)
-            st.image(img, caption="رمز QR ZATCA")
-            st.download_button("⬇️ تحميل QR", img, "zatca_qr.png", "image/png")
+    st.header("📑 PDF Metadata")
+    up = st.file_uploader("تحميل PDF", type=["pdf"])
+    if up:
+        if "meta_dict" not in st.session_state or st.session_state.get("_last_file_name") != up.name:
+            meta, keys = read_meta(up)
+            st.session_state.meta_keys = keys
+            st.session_state.meta_dict = meta
+            st.session_state._last_file_name = up.name
+            for k, v in meta.items():
+                if k not in st.session_state:
+                    st.session_state[k] = v
+            st.session_state.setdefault("_prev_creation", st.session_state.get("/CreationDate", ""))
+            st.session_state.setdefault("_prev_mod",       st.session_state.get("/ModDate", ""))
 
-# ================= الصف الأسفل: (Code128) + (PDF Metadata) =================
+        auto = st.checkbox("تحديث تلقائي ثنائي الاتجاه بين ModDate و CreationDate (أثناء الكتابة)", value=True, key="_auto_sync")
+
+        # مزامنة فورية قبل رسم الحقول
+        if auto:
+            c_now = st.session_state.get("/CreationDate", "")
+            m_now = st.session_state.get("/ModDate", "")
+            pc = st.session_state.get("_prev_creation", c_now)
+            pm = st.session_state.get("_prev_mod", m_now)
+            if c_now != pc and m_now == pm:
+                st.session_state["/ModDate"] = c_now; m_now = c_now
+            elif m_now != pm and c_now == pc:
+                st.session_state["/CreationDate"] = m_now; c_now = m_now
+            st.session_state["_prev_creation"] = c_now
+            st.session_state["_prev_mod"]      = m_now
+
+        # ترتيب عرض الحقول
+        ordered = ["/ModDate","/CreationDate"] + [k for k in st.session_state.meta_keys if k not in ("/ModDate","/CreationDate")]
+        updated = {}
+        for k in ordered:
+            label = k[1:] if k.startswith("/") else k
+            st.text_input(label, key=k)
+            updated[k] = st.session_state.get(k, "")
+
+        # زر إرسال CreationDate إلى مولّد QR (تاريخ + وقت)
+        if st.button("📨 إرسال CreationDate إلى مولّد QR"):
+            cre = st.session_state.get("/CreationDate", "")
+            d, t = parse_display_dt(cre)
+            if d and t:
+                st.session_state["qr_date"] = d
+                st.session_state["qr_time"] = t
+                st.success("تم إرسال التاريخ والوقت إلى قسم مولّد QR ✅")
+                st.rerun()
+            else:
+                st.error("صيغة CreationDate غير صحيحة. الصيغة الصحيحة: dd/mm/YYYY, HH:MM:SS")
+
+        # حفظ الميتاداتا
+        if st.button("حفظ Metadata"):
+            out = write_meta(up, updated)
+            st.download_button("تحميل الملف المعدّل", data=out, file_name=up.name, mime="application/pdf")
+
+# =========================================================
+# الصف الأسفل: (يسار) Code128  —  (يمين) مولّد QR  (نُقل للأسفل يمين)
+# =========================================================
 c3, c4 = st.columns(2)
 
 with c3:
@@ -165,57 +228,25 @@ with c3:
             st.download_button("⬇️ تحميل", final, "code128.png", "image/png")
 
 with c4:
-    st.header("📑 PDF Metadata")
-    up = st.file_uploader("تحميل PDF", type=["pdf"])
-    if up:
-        # قراءة الميتاداتا وتهيئة الحالة
-        if "meta_dict" not in st.session_state or st.session_state.get("_last_file_name") != up.name:
-            meta, keys = read_meta(up)
-            st.session_state.meta_keys = keys
-            st.session_state.meta_dict = meta
-            st.session_state._last_file_name = up.name
-            # تهيئة session_state لكل مفتاح بدون تمرير value لاحقًا
-            for k, v in meta.items():
-                if k not in st.session_state:
-                    st.session_state[k] = v
-            # متغيرات تتبع آخر قيم لمعرفة أيهما تغيّر
-            st.session_state.setdefault("_prev_creation", st.session_state.get("/CreationDate", ""))
-            st.session_state.setdefault("_prev_mod",       st.session_state.get("/ModDate", ""))
+    st.header("🔖 مولّد QR (ZATCA)")
+    vat    = st.text_input("الرقم الضريبي (15 رقم)", key="qr_vat_number")
+    seller = st.text_input("اسم البائع", key="qr_seller")
 
-        # خيار المزامنة الفورية ثنائية الاتجاه
-        auto = st.checkbox("تحديث تلقائي ثنائي الاتجاه بين ModDate و CreationDate (أثناء الكتابة)", value=True, key="_auto_sync")
+    # حقول الإجمالي والضريبة تأتي من الحاسبة عند الضغط على زر الإرسال
+    total  = st.text_input("الإجمالي (شامل)", key="qr_total", value=st.session_state.get("qr_total", "0.00"))
+    tax    = st.text_input("الضريبة", key="qr_vat",   value=st.session_state.get("qr_vat", "0.00"))
 
-        # ====== مزامنة قبل رسم الحقول لضمان ظهور التغيير فورًا ======
-        if auto:
-            c_now = st.session_state.get("/CreationDate", "")
-            m_now = st.session_state.get("/ModDate", "")
-            pc = st.session_state.get("_prev_creation", c_now)
-            pm = st.session_state.get("_prev_mod", m_now)
+    # التاريخ والوقت تأتي من Metadata عند الضغط على زر الإرسال
+    d_val = st.date_input("التاريخ",  key="qr_date", value=st.session_state.get("qr_date", date.today()))
+    t_val = st.time_input("الوقت",    key="qr_time", value=st.session_state.get("qr_time", datetime.now().time().replace(second=0, microsecond=0)), step=60)
 
-            if c_now != pc and m_now == pm:
-                # المستخدم غيّر CreationDate -> انسخه إلى ModDate فورًا
-                st.session_state["/ModDate"] = c_now
-                m_now = c_now
-            elif m_now != pm and c_now == pc:
-                # المستخدم غيّر ModDate -> انسخه إلى CreationDate فورًا
-                st.session_state["/CreationDate"] = m_now
-                c_now = m_now
-
-            # حدّث المؤشرات
-            st.session_state["_prev_creation"] = c_now
-            st.session_state["_prev_mod"]      = m_now
-
-        # ====== عرض كل الحقول ======
-        # نفضل التاريخين أولاً ثم بقية الحقول الموجودة
-        ordered = ["/ModDate","/CreationDate"] + [k for k in st.session_state.meta_keys if k not in ("/ModDate","/CreationDate")]
-        updated = {}
-        for k in ordered:
-            label = k[1:] if k.startswith("/") else k
-            # لا نمرر value — نستخدم session_state فقط لضمان تحديث فوري
-            st.text_input(label, key=k)
-            updated[k] = st.session_state.get(k, "")
-
-        # حفظ
-        if st.button("حفظ Metadata"):
-            out = write_meta(up, updated)
-            st.download_button("تحميل الملف المعدّل", data=out, file_name=up.name, mime="application/pdf")
+    if st.button("إنشاء رمز QR"):
+        vclean = _clean_vat(vat)
+        if len(vclean) != 15:
+            st.error("الرقم الضريبي يجب أن يكون 15 رقمًا.")
+        else:
+            b64 = build_zatca_base64(seller.strip(), vclean, _iso_utc(d_val, t_val), _fmt2(total), _fmt2(tax))
+            st.code(b64, language="text")
+            img = make_qr(b64)
+            st.image(img, caption="رمز QR ZATCA")
+            st.download_button("⬇️ تحميل QR", img, "zatca_qr.png", "image/png")
