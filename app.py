@@ -159,7 +159,6 @@ if st.button("إنشاء رمز QR (ZATCA)"):
         except ValueError as e:
             st.error(f"خطأ في TLV: {e}")
         else:
-            # حفظ الربط تلقائيًا
             vat_save(vat_clean, seller_name)
 
             st.subheader("Base64 الناتج")
@@ -168,7 +167,6 @@ if st.button("إنشاء رمز QR (ZATCA)"):
             if dense_mode:
                 png_bytes = make_qr_dense(b64, version=14, border=4, base_box=2, final_px=640)
             else:
-                # وضع قياسي
                 qr = qrcode.QRCode(error_correction=ERROR_CORRECT_M, box_size=8, border=4)
                 qr.add_data(b64); qr.make(fit=True)
                 img = qr.make_image(fill_color="black", back_color="white").convert("RGB")
@@ -196,7 +194,7 @@ with st.expander("📁 حفظ/تحميل دفتر الأسماء"):
         except Exception as e:
             st.error(f"فشل الاستيراد: {e}")
 
-# ================= قسم 3: باركود Code-128 (بدون نص سفلي وبدون هوامش) =================
+# ================= قسم 3: باركود Code-128 (بدون نص وبدون هوامش) =================
 st.header("🧾 مولّد باركود Code-128 (كامل بدون هوامش)")
 
 # مقاس افتراضي (جرير)
@@ -217,8 +215,8 @@ def render_barcode_png_bytes(data: str) -> bytes:
         "write_text": False,
         "dpi": int(DPI),
         "module_height": inches_to_mm(HEIGHT_IN),
-        "quiet_zone": 0.0,        # لا تترك أي هوامش
-        "text_distance": 0.0,     # يمنع ترك مساحة للنص
+        "quiet_zone": 0.0,
+        "text_distance": 0.0,
         "background": "white",
         "foreground": "black",
     }
@@ -227,20 +225,22 @@ def render_barcode_png_bytes(data: str) -> bytes:
     code.write(buf, opts)
     buf.seek(0)
 
-    # قص الهوامش البيضاء إن وجدت
-    img = Image.open(buf)
-    img = ImageOps.crop(img, border=0)       # إزالة الحدود البيضاء
-    img = img.convert("RGB")
-    
+    # فتح الصورة
+    img = Image.open(buf).convert("RGB")
+
+    # قص كل الهوامش البيضاء
+    bbox = img.getbbox()
+    if bbox:
+        img = img.crop(bbox)
+
+    # إعادة التحجيم للمقاس المطلوب
+    target_w_px = px_from_in(WIDTH_IN, DPI)
+    target_h_px = px_from_in(HEIGHT_IN, DPI)
+    img = img.resize((target_w_px, target_h_px), Image.NEAREST)
+
     out = BytesIO()
     img.save(out, format="PNG", dpi=(DPI, DPI))
     return out.getvalue()
-
-def resize_to_exact(png_bytes: bytes, target_w_px: int, target_h_px: int) -> bytes:
-    with Image.open(BytesIO(png_bytes)) as im:
-        resized = im.resize((target_w_px, target_h_px), Image.NEAREST)
-        out = BytesIO(); resized.save(out, format="PNG", dpi=(DPI, DPI))
-        return out.getvalue()
 
 code128_val = st.text_input("أدخل الرقم/النص (Code-128)")
 if st.button("إنشاء الكود 128"):
@@ -249,12 +249,9 @@ if st.button("إنشاء الكود 128"):
         st.error("أدخل رقمًا/نصًا صالحًا.")
     else:
         try:
-            raw_png = render_barcode_png_bytes(clean)
-            target_w_px = px_from_in(WIDTH_IN, DPI)
-            target_h_px = px_from_in(HEIGHT_IN, DPI)
-            final_png = resize_to_exact(raw_png, target_w_px, target_h_px)
+            final_png = render_barcode_png_bytes(clean)
             st.image(final_png, caption=f"{WIDTH_IN}×{HEIGHT_IN} inch @ {DPI} DPI")
             st.download_button("⬇️ تحميل Code-128", final_png, file_name="code128.png", mime="image/png")
-            st.success("الباركود جاهز: بدون أي هوامش، للطباعة Scale=100%.")
+            st.success("الباركود جاهز بدون أي هوامش، للطباعة Scale=100%.")
         except Exception as e:
             st.error(f"تعذّر الإنشاء: {e}")
