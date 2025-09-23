@@ -7,7 +7,7 @@ from decimal import Decimal, ROUND_HALF_UP, InvalidOperation
 import streamlit as st
 import qrcode
 from qrcode.constants import ERROR_CORRECT_M
-from PIL import Image
+from PIL import Image, ImageOps
 from barcode import Code128
 from barcode.writer import ImageWriter
 
@@ -196,11 +196,11 @@ with st.expander("📁 حفظ/تحميل دفتر الأسماء"):
         except Exception as e:
             st.error(f"فشل الاستيراد: {e}")
 
-# ================= قسم 3: باركود Code-128 (بدون نص سفلي) =================
-st.header("🧾 مولّد باركود Code-128 (بدون نص سفلي)")
+# ================= قسم 3: باركود Code-128 (بدون نص سفلي وبدون هوامش) =================
+st.header("🧾 مولّد باركود Code-128 (كامل بدون هوامش)")
 
 # مقاس افتراضي (جرير)
-WIDTH_IN, HEIGHT_IN, DPI, QUIET_MM = 1.86, 0.28, 600, 0.0
+WIDTH_IN, HEIGHT_IN, DPI = 1.86, 0.28, 600
 
 def inches_to_mm(x): return float(x) * 25.4
 def px_from_in(inches, dpi): return int(round(float(inches) * int(dpi)))
@@ -217,13 +217,24 @@ def render_barcode_png_bytes(data: str) -> bytes:
         "write_text": False,
         "dpi": int(DPI),
         "module_height": inches_to_mm(HEIGHT_IN),
-        "quiet_zone": float(QUIET_MM),
+        "quiet_zone": 0.0,        # لا تترك أي هوامش
+        "text_distance": 0.0,     # يمنع ترك مساحة للنص
         "background": "white",
         "foreground": "black",
     }
     code = Code128(data, writer=writer)
-    buf = BytesIO(); code.write(buf, opts)
-    return buf.getvalue()
+    buf = BytesIO()
+    code.write(buf, opts)
+    buf.seek(0)
+
+    # قص الهوامش البيضاء إن وجدت
+    img = Image.open(buf)
+    img = ImageOps.crop(img, border=0)       # إزالة الحدود البيضاء
+    img = img.convert("RGB")
+    
+    out = BytesIO()
+    img.save(out, format="PNG", dpi=(DPI, DPI))
+    return out.getvalue()
 
 def resize_to_exact(png_bytes: bytes, target_w_px: int, target_h_px: int) -> bytes:
     with Image.open(BytesIO(png_bytes)) as im:
@@ -244,7 +255,6 @@ if st.button("إنشاء الكود 128"):
             final_png = resize_to_exact(raw_png, target_w_px, target_h_px)
             st.image(final_png, caption=f"{WIDTH_IN}×{HEIGHT_IN} inch @ {DPI} DPI")
             st.download_button("⬇️ تحميل Code-128", final_png, file_name="code128.png", mime="image/png")
-            st.success("الطباعة: Scale = 100%، بدون Fit to page.")
+            st.success("الباركود جاهز: بدون أي هوامش، للطباعة Scale=100%.")
         except Exception as e:
             st.error(f"تعذّر الإنشاء: {e}")
-
