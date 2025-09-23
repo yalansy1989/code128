@@ -10,11 +10,11 @@ from qrcode.constants import ERROR_CORRECT_M
 from PIL import Image
 from barcode import Code128
 from barcode.writer import ImageWriter
-from pypdf import PdfReader, PdfWriter   # ✅ مكتبة مدعومة
+from pypdf import PdfReader, PdfWriter
 
 # ================= إعداد عام =================
 st.set_page_config(page_title="💰 حاسبة + ZATCA 2025 + Code128 + Metadata", page_icon="💰", layout="wide")
-st.title("💰 حاسبة الضريبة + مولّد  (ZATCA) + QR باركود Code-128 + أداة Edit Metadata")
+st.title("💰 حاسبة الضريبة + مولّد QR (ZATCA) + باركود Code-128 + أداة Metadata")
 
 # حالة مشتركة
 st.session_state.setdefault("qr_total", "0.00")
@@ -148,11 +148,12 @@ def update_pdf_metadata(pdf_file, new_metadata):
     output_pdf_bytes.seek(0)
     return output_pdf_bytes
 
-# --- Callback لمزامنة التاريخ ---
-def update_creation_date_callback():
-    if st.session_state.get("sync_dates", True):
-        if "moddate_input" in st.session_state:
-            st.session_state.creationdate_input = st.session_state.moddate_input
+# --- مزامنة ديناميكية ---
+def sync_mod_and_creation(source):
+    if source == "mod" and "moddate_input" in st.session_state:
+        st.session_state.creationdate_input = st.session_state.moddate_input
+    elif source == "creation" and "creationdate_input" in st.session_state:
+        st.session_state.moddate_input = st.session_state.creationdate_input
 
 # =============== واجهة المستخدم ===============
 # الصف الأول: حاسبة الضريبة + مولد QR
@@ -209,9 +210,6 @@ with col4:
         if st.session_state.metadata:
             st.subheader("بيانات التعريف الحالية")
 
-            # ✅ خيار تحديث تلقائي أو يدوي
-            st.checkbox("تحديث CreationDate تلقائياً مع ModDate", key="sync_dates", value=True)
-
             updated_metadata = {}
             for key, value in st.session_state.metadata.items():
                 display_key = key[1:] if key.startswith("/") else key
@@ -221,13 +219,14 @@ with col4:
                         display_key,
                         value=value,
                         key="moddate_input",
-                        on_change=update_creation_date_callback
+                        on_change=lambda: sync_mod_and_creation("mod")
                     )
                 elif key == "/CreationDate":
                     updated_metadata[key] = st.text_input(
                         display_key,
                         value=st.session_state.get("creationdate_input", value),
-                        key="creationdate_input"
+                        key="creationdate_input",
+                        on_change=lambda: sync_mod_and_creation("creation")
                     )
                 else:
                     updated_metadata[key] = st.text_input(display_key, value=value, key=key)
