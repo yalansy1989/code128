@@ -25,6 +25,14 @@ h1, h2, h3 { text-align:center; font-weight:700; }
 
 st.title("💰 حاسبة الضريبة + مولّد QR (ZATCA) + Code128 + PDF Metadata")
 
+# ================= حالة افتراضية ثابتة (تحافظ على القيم) =================
+st.session_state.setdefault("qr_total", "0.00")
+st.session_state.setdefault("qr_vat", "0.00")
+st.session_state.setdefault("qr_date", date.today())
+st.session_state.setdefault("qr_time", datetime.now().time().replace(microsecond=0))
+st.session_state.setdefault("qr_vat_number", "")
+st.session_state.setdefault("qr_seller", "")
+
 # ================= أدوات مشتركة =================
 def _clean_vat(v: str) -> str: return re.sub(r"\D", "", v or "")
 
@@ -34,8 +42,14 @@ def _fmt2(x: str) -> str:
     return format(q.quantize(Decimal("0.01"), rounding=ROUND_HALF_UP), "f")
 
 def _iso_utc(d: date, t: time) -> str:
-    dt = datetime.combine(d, t.replace(second=0, microsecond=0))
-    return dt.astimezone(timezone.utc).strftime("%Y-%m-%dT%H:%M:%SZ")
+    # نحافظ على الثواني، ونزيل فقط microseconds
+    local_dt = datetime.combine(d, t.replace(microsecond=0))
+    # نفترض التوقيت المحلي ثم نحول لـ UTC
+    try:
+        return local_dt.astimezone(timezone.utc).strftime("%Y-%m-%dT%H:%M:%SZ")
+    except Exception:
+        # في حال datetime naive ولا يوجد TZ، استخدمه كما هو بدون تحويل
+        return local_dt.strftime("%Y-%m-%dT%H:%M:%SZ")
 
 def _tlv(tag: int, val: str) -> bytes:
     b = val.encode("utf-8")
@@ -82,7 +96,7 @@ def resize_code128(png_bytes: bytes) -> bytes:
         out = BytesIO(); im.save(out, format="PNG", dpi=(DPI, DPI))
         return out.getvalue()
 
-# ================= PDF Metadata helpers =================
+# ================= PDF Metadata =================
 BASE_KEYS = ["/ModDate","/CreationDate","/Producer","/Title","/Author","/Subject","/Keywords","/Creator"]
 
 def pdf_date_to_display_date(s):
@@ -100,7 +114,6 @@ def display_date_to_pdf_date(s):
     except: return s
 
 def parse_display_dt(s: str):
-    """ارجاع (date,time) من نص dd/mm/YYYY, HH:MM:SS"""
     try:
         dt = datetime.strptime(s.strip(), "%d/%m/%Y, %H:%M:%S")
         return dt.date(), dt.time().replace(microsecond=0)
@@ -127,11 +140,10 @@ def write_meta(file, new_md):
     out = io.BytesIO(); w.write(out); out.seek(0); return out
 
 # =========================================================
-# الصف الأعلى: (يسار) الحاسبة  —  (يمين) تعديل Metadata  (تم النقل)
+# الصف الأعلى: (يسار) الحاسبة  —  (يمين) Metadata
 # =========================================================
 c1, c2 = st.columns(2)
 
-# --------- الحاسبة ---------
 with c1:
     st.header("📊 حاسبة الضريبة")
     total_incl = st.number_input("المبلغ شامل الضريبة", min_value=0.0, step=0.01)
@@ -149,12 +161,12 @@ with c1:
             rate = tax_rate/100.0 if tax_rate else 0.0
             before = round(total_incl/(1+rate), 2) if total_incl and rate else 0.0
             vat_amount = round(total_incl - before, 2) if total_incl and rate else 0.0
+            # حفظ دائم في الحالة
             st.session_state["qr_total"] = f"{total_incl:.2f}"
             st.session_state["qr_vat"]   = f"{vat_amount:.2f}"
             st.toast("تم إرسال الإجمالي والضريبة إلى قسم مولّد QR ✅")
             st.rerun()
 
-# --------- تعديل Metadata (نُقل للأعلى يمين) ---------
 with c2:
     st.header("📑 PDF Metadata")
     up = st.file_uploader("تحميل PDF", type=["pdf"])
@@ -193,7 +205,7 @@ with c2:
             st.text_input(label, key=k)
             updated[k] = st.session_state.get(k, "")
 
-        # زر إرسال CreationDate إلى مولّد QR (تاريخ + وقت)
+        # إرسال CreationDate إلى مولّد QR (يحفظ في الحالة ولا يمس بقية القيم)
         if st.button("📨 إرسال CreationDate إلى مولّد QR"):
             cre = st.session_state.get("/CreationDate", "")
             d, t = parse_display_dt(cre)
@@ -203,15 +215,15 @@ with c2:
                 st.success("تم إرسال التاريخ والوقت إلى قسم مولّد QR ✅")
                 st.rerun()
             else:
-                st.error("صيغة CreationDate غير صحيحة. الصيغة الصحيحة: dd/mm/YYYY, HH:MM:SS")
+                st.error("صيغة CreationDate غير صحيحة. الصيغة: dd/mm/YYYY, HH:MM:SS")
 
-        # حفظ الميتاداتا
+        # حفظ الميتاداتا للملف
         if st.button("حفظ Metadata"):
             out = write_meta(up, updated)
             st.download_button("تحميل الملف المعدّل", data=out, file_name=up.name, mime="application/pdf")
 
 # =========================================================
-# الصف الأسفل: (يسار) Code128  —  (يمين) مولّد QR  (نُقل للأسفل يمين)
+# الصف الأسفل: (يسار) Code128  —  (يمين) مولّد QR
 # =========================================================
 c3, c4 = st.columns(2)
 
@@ -229,23 +241,30 @@ with c3:
 
 with c4:
     st.header("🔖 مولّد QR (ZATCA)")
-    vat    = st.text_input("الرقم الضريبي (15 رقم)", key="qr_vat_number")
-    seller = st.text_input("اسم البائع", key="qr_seller")
+    # حقول محفوظة دائمًا من session_state
+    vat_input    = st.text_input("الرقم الضريبي (15 رقم)", key="qr_vat_number")
+    seller_input = st.text_input("اسم البائع", key="qr_seller")
 
-    # حقول الإجمالي والضريبة تأتي من الحاسبة عند الضغط على زر الإرسال
-    total  = st.text_input("الإجمالي (شامل)", key="qr_total", value=st.session_state.get("qr_total", "0.00"))
-    tax    = st.text_input("الضريبة", key="qr_vat",   value=st.session_state.get("qr_vat", "0.00"))
+    total_input  = st.text_input("الإجمالي (شامل)", key="qr_total")
+    tax_input    = st.text_input("الضريبة", key="qr_vat")
 
-    # التاريخ والوقت تأتي من Metadata عند الضغط على زر الإرسال
-    d_val = st.date_input("التاريخ",  key="qr_date", value=st.session_state.get("qr_date", date.today()))
-    t_val = st.time_input("الوقت",    key="qr_time", value=st.session_state.get("qr_time", datetime.now().time().replace(second=0, microsecond=0)), step=60)
+    # إظهار الثواني: step=1، والقيمة من الحالة
+    d_val = st.date_input("التاريخ", key="qr_date", value=st.session_state.get("qr_date", date.today()))
+    t_val = st.time_input("الوقت (بالثواني)", key="qr_time",
+                          value=st.session_state.get("qr_time", datetime.now().time().replace(microsecond=0)),
+                          step=1)  # ثواني
 
     if st.button("إنشاء رمز QR"):
-        vclean = _clean_vat(vat)
+        vclean = _clean_vat(st.session_state["qr_vat_number"])
         if len(vclean) != 15:
             st.error("الرقم الضريبي يجب أن يكون 15 رقمًا.")
         else:
-            b64 = build_zatca_base64(seller.strip(), vclean, _iso_utc(d_val, t_val), _fmt2(total), _fmt2(tax))
+            iso = _iso_utc(st.session_state["qr_date"], st.session_state["qr_time"])
+            b64 = build_zatca_base64(st.session_state["qr_seller"].strip(),
+                                     vclean,
+                                     iso,
+                                     _fmt2(st.session_state["qr_total"]),
+                                     _fmt2(st.session_state["qr_vat"]))
             st.code(b64, language="text")
             img = make_qr(b64)
             st.image(img, caption="رمز QR ZATCA")
