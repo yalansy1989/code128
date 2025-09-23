@@ -25,13 +25,15 @@ h1, h2, h3 { text-align:center; font-weight:700; }
 
 st.title("💰 حاسبة الضريبة + مولّد QR (ZATCA) + Code128 + PDF Metadata")
 
-# ================= حالة افتراضية ثابتة (تحافظ على القيم) =================
+# ================= حالة افتراضية ثابتة =================
 st.session_state.setdefault("qr_total", "0.00")
 st.session_state.setdefault("qr_vat", "0.00")
 st.session_state.setdefault("qr_date", date.today())
 st.session_state.setdefault("qr_time", datetime.now().time().replace(microsecond=0))
 st.session_state.setdefault("qr_vat_number", "")
 st.session_state.setdefault("qr_seller", "")
+# ثواني منفصلة لواجهة QR (يتم دمجها دائمًا داخل qr_time)
+st.session_state.setdefault("qr_secs", st.session_state["qr_time"].second)
 
 # ================= أدوات مشتركة =================
 def _clean_vat(v: str) -> str: return re.sub(r"\D", "", v or "")
@@ -42,13 +44,10 @@ def _fmt2(x: str) -> str:
     return format(q.quantize(Decimal("0.01"), rounding=ROUND_HALF_UP), "f")
 
 def _iso_utc(d: date, t: time) -> str:
-    # نحافظ على الثواني، ونزيل فقط microseconds
     local_dt = datetime.combine(d, t.replace(microsecond=0))
-    # نفترض التوقيت المحلي ثم نحول لـ UTC
     try:
         return local_dt.astimezone(timezone.utc).strftime("%Y-%m-%dT%H:%M:%SZ")
     except Exception:
-        # في حال datetime naive ولا يوجد TZ، استخدمه كما هو بدون تحويل
         return local_dt.strftime("%Y-%m-%dT%H:%M:%SZ")
 
 def _tlv(tag: int, val: str) -> bytes:
@@ -161,7 +160,6 @@ with c1:
             rate = tax_rate/100.0 if tax_rate else 0.0
             before = round(total_incl/(1+rate), 2) if total_incl and rate else 0.0
             vat_amount = round(total_incl - before, 2) if total_incl and rate else 0.0
-            # حفظ دائم في الحالة
             st.session_state["qr_total"] = f"{total_incl:.2f}"
             st.session_state["qr_vat"]   = f"{vat_amount:.2f}"
             st.toast("تم إرسال الإجمالي والضريبة إلى قسم مولّد QR ✅")
@@ -197,7 +195,6 @@ with c2:
             st.session_state["_prev_creation"] = c_now
             st.session_state["_prev_mod"]      = m_now
 
-        # ترتيب عرض الحقول
         ordered = ["/ModDate","/CreationDate"] + [k for k in st.session_state.meta_keys if k not in ("/ModDate","/CreationDate")]
         updated = {}
         for k in ordered:
@@ -205,19 +202,18 @@ with c2:
             st.text_input(label, key=k)
             updated[k] = st.session_state.get(k, "")
 
-        # إرسال CreationDate إلى مولّد QR (يحفظ في الحالة ولا يمس بقية القيم)
         if st.button("📨 إرسال CreationDate إلى مولّد QR"):
             cre = st.session_state.get("/CreationDate", "")
             d, t = parse_display_dt(cre)
             if d and t:
                 st.session_state["qr_date"] = d
                 st.session_state["qr_time"] = t
+                st.session_state["qr_secs"] = t.second  # احفظ الثواني أيضاً
                 st.success("تم إرسال التاريخ والوقت إلى قسم مولّد QR ✅")
                 st.rerun()
             else:
                 st.error("صيغة CreationDate غير صحيحة. الصيغة: dd/mm/YYYY, HH:MM:SS")
 
-        # حفظ الميتاداتا للملف
         if st.button("حفظ Metadata"):
             out = write_meta(up, updated)
             st.download_button("تحميل الملف المعدّل", data=out, file_name=up.name, mime="application/pdf")
@@ -241,18 +237,28 @@ with c3:
 
 with c4:
     st.header("🔖 مولّد QR (ZATCA)")
-    # حقول محفوظة دائمًا من session_state
+
     vat_input    = st.text_input("الرقم الضريبي (15 رقم)", key="qr_vat_number")
     seller_input = st.text_input("اسم البائع", key="qr_seller")
 
     total_input  = st.text_input("الإجمالي (شامل)", key="qr_total")
     tax_input    = st.text_input("الضريبة", key="qr_vat")
 
-    # إظهار الثواني: step=1، والقيمة من الحالة
+    # وقت مع ثوانٍ: time_input بالدقائق + حقل ثوانٍ منفصل (Streamlit لا يسمح step<60)
+    # نضبط قيمة مرجعية لحقل الوقت بدون ثواني، ثم ندمجها مع حقل الثواني في كل مرة.
+    hm_time = st.time_input(
+        "الوقت (ساعة:دقيقة)",
+        key="qr_time_hm",
+        value=st.session_state["qr_time"].replace(second=0),
+        step=60  # أقل قيمة مسموحة من Streamlit
+    )
+    secs = st.number_input("الثواني", min_value=0, max_value=59, step=1, key="qr_secs", value=st.session_state.get("qr_secs", 0))
+
+    # ادمج ساعة/دقيقة + ثواني في qr_time واحفظ دائمًا
+    st.session_state["qr_time"] = time(hm_time.hour, hm_time.minute, int(secs))
+    st.caption(f"الوقت الحالي: {st.session_state['qr_time'].strftime('%H:%M:%S')}")
+
     d_val = st.date_input("التاريخ", key="qr_date", value=st.session_state.get("qr_date", date.today()))
-    t_val = st.time_input("الوقت (بالثواني)", key="qr_time",
-                          value=st.session_state.get("qr_time", datetime.now().time().replace(microsecond=0)),
-                          step=1)  # ثواني
 
     if st.button("إنشاء رمز QR"):
         vclean = _clean_vat(st.session_state["qr_vat_number"])
