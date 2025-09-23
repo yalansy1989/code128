@@ -16,225 +16,142 @@ from pypdf import PdfReader, PdfWriter
 st.set_page_config(page_title="حاسبة + ZATCA + Code128 + PDF Metadata", page_icon="💰", layout="wide")
 st.markdown("""
 <style>
-/* عناوين ديناميكية: أخضر فاتح / أبيض داكن */
+/* عناوين ديناميكية */
 h1, h2, h3 { text-align:center; font-weight:700; }
 @media (prefers-color-scheme: light) { h1, h2, h3 { color:#046307 !important; } }
 @media (prefers-color-scheme: dark)  { h1, h2, h3 { color:#ffffff !important; } }
-/* بطاقات بسيطة */
 .block-container { padding-top: 1.2rem; }
 </style>
 """, unsafe_allow_html=True)
 
 st.title("💰 حاسبة الضريبة + مولّد QR (ZATCA) + Code128 + PDF Metadata")
 
-# ---------------- أدوات مساعدة عامة ----------------
+# ---------------- أدوات مساعدة ----------------
 def _clean_vat(v: str) -> str: return re.sub(r"\D", "", v or "")
-
 def _fmt2(x: str) -> str:
     try: q = Decimal(x)
     except InvalidOperation: q = Decimal("0")
-    q = q.quantize(Decimal("0.01"), rounding=ROUND_HALF_UP)
-    return format(q, "f")
+    return format(q.quantize(Decimal("0.01"), rounding=ROUND_HALF_UP), "f")
+def _iso_utc(d: date, t: time) -> str:
+    dt = datetime.combine(d, t.replace(second=0, microsecond=0))
+    return dt.astimezone(timezone.utc).strftime("%Y-%m-%dT%H:%M:%SZ")
+def _tlv(tag: int, val: str) -> bytes:
+    b = val.encode("utf-8"); return bytes([tag, len(b)]) + b
+def build_zatca_base64(seller, vat, dt_iso, total, vat_s):
+    return base64.b64encode(b"".join([
+        _tlv(1,seller), _tlv(2,vat), _tlv(3,dt_iso), _tlv(4,total), _tlv(5,vat_s)
+    ])).decode("ascii")
 
-def _iso_utc(dt_date: date, dt_time: time) -> str:
-    local_dt = datetime.combine(dt_date, dt_time.replace(second=0, microsecond=0))
-    return local_dt.astimezone(timezone.utc).strftime("%Y-%m-%dT%H:%M:%SZ")
-
-def _tlv(tag: int, value: str) -> bytes:
-    vb = value.encode("utf-8")
-    if len(vb) > 255: raise ValueError("قيمة TLV أطول من 255 بايت.")
-    return bytes([tag, len(vb)]) + vb
-
-def build_zatca_base64(seller: str, vat: str, dt_iso: str, total_s: str, vat_s: str) -> str:
-    payload = b"".join([_tlv(1, seller), _tlv(2, vat), _tlv(3, dt_iso), _tlv(4, total_s), _tlv(5, vat_s)])
-    return base64.b64encode(payload).decode("ascii")
-
-# ---------------- QR كثيف ----------------
-def make_qr_dense(b64_text: str, *, version: int = 14, error_correction=ERROR_CORRECT_M,
-                  border: int = 4, base_box: int = 2, final_px: int = 640) -> bytes:
-    qr = qrcode.QRCode(version=version, error_correction=error_correction, box_size=base_box, border=border)
-    qr.add_data(b64_text); qr.make(fit=False)
+# ---------------- QR ----------------
+def make_qr(b64: str) -> bytes:
+    qr = qrcode.QRCode(version=14, error_correction=ERROR_CORRECT_M, box_size=2, border=4)
+    qr.add_data(b64); qr.make(fit=False)
     img = qr.make_image(fill_color="black", back_color="white").convert("RGB")
-    img = img.resize((final_px, final_px), Image.NEAREST)
+    img = img.resize((640, 640), Image.NEAREST)
     out = BytesIO(); img.save(out, format="PNG")
     return out.getvalue()
 
-# ---------------- Code128 بدون هوامش وبالمقاس المطلوب ----------------
-WIDTH_IN, HEIGHT_IN, DPI, QUIET_MM = 1.86, 0.31, 600, 0.0
-def inches_to_mm(x): return float(x) * 25.4
-def px_from_in(inches, dpi): return int(round(float(inches) * int(dpi)))
-
+# ---------------- Code128 ----------------
+WIDTH_IN, HEIGHT_IN, DPI = 1.86, 0.31, 600
 ARABIC_DIGITS = str.maketrans("٠١٢٣٤٥٦٧٨٩", "0123456789")
-def sanitize(s: str) -> str:
-    s = (s or "").translate(ARABIC_DIGITS)
-    s = re.sub(r"[\u200e\u200f\u202a-\u202e\u2066-\u2069\ufeff]", "", s)
-    return "".join(ch for ch in s if ord(ch) < 128).strip()
-
-def render_barcode_png_bytes(data: str) -> bytes:
-    writer = ImageWriter()
-    opts = {
-        "write_text": False,
-        "dpi": int(DPI),
-        "module_height": inches_to_mm(HEIGHT_IN),
-        "quiet_zone": float(QUIET_MM),
-        "background": "white",
-        "foreground": "black",
-    }
-    code = Code128(data, writer=writer)
-    buf = BytesIO(); code.write(buf, opts)
+def sanitize(s): return re.sub(r"[^\x00-\x7F]", "", (s or "").translate(ARABIC_DIGITS))
+def render_code128(data: str) -> bytes:
+    code = Code128(data, writer=ImageWriter())
+    buf = BytesIO()
+    code.write(buf, {"write_text": False, "dpi": DPI, "module_height": HEIGHT_IN*25.4, "quiet_zone": 0})
     return buf.getvalue()
-
-def resize_to_exact(png_bytes: bytes, target_w_px: int, target_h_px: int) -> bytes:
-    with Image.open(BytesIO(png_bytes)) as im:
-        resized = im.resize((target_w_px, target_h_px), Image.NEAREST)
-        out = BytesIO(); resized.save(out, format="PNG", dpi=(DPI, DPI))
+def resize_code128(png: bytes) -> bytes:
+    with Image.open(BytesIO(png)) as im:
+        im = im.resize((int(WIDTH_IN*DPI), int(HEIGHT_IN*DPI)), Image.NEAREST)
+        out = BytesIO(); im.save(out, format="PNG", dpi=(DPI,DPI))
         return out.getvalue()
 
-# ---------------- PDF Metadata (قراءة/كتابة + تنسيقات التاريخ) ----------------
-def pdf_date_to_display_date(pdf_date_str):
-    if not pdf_date_str or not isinstance(pdf_date_str, str): return ""
-    if pdf_date_str.startswith("D:"): pdf_date_str = pdf_date_str[2:]
-    m = re.match(r"^(\d{4})(\d{2})(\d{2})(\d{2})(\d{2})(\d{2})", pdf_date_str)
+# ---------------- PDF Metadata ----------------
+ALL_KEYS = ["/Title","/Author","/Subject","/Keywords","/Creator","/Producer","/CreationDate","/ModDate"]
+def pdf_date_to_display_date(s):
+    if not s: return ""
+    if s.startswith("D:"): s=s[2:]
+    m=re.match(r"^(\d{4})(\d{2})(\d{2})(\d{2})(\d{2})(\d{2})",s)
     if m:
-        y, M, d, H, m_, s = m.groups()
-        try: return datetime(int(y), int(M), int(d), int(H), int(m_), int(s)).strftime("%d/%m/%Y, %H:%M:%S")
-        except ValueError: return pdf_date_str
-    return pdf_date_str
-
-def display_date_to_pdf_date(display_date_str):
-    if not display_date_str or not isinstance(display_date_str, str): return ""
-    try:
-        dt = datetime.strptime(display_date_str, "%d/%m/%Y, %H:%M:%S")
-        return dt.strftime("D:%Y%m%d%H%M%S+03'00'")
-    except ValueError:
-        return display_date_str
-
-def read_pdf_metadata(pdf_file):
-    pdf_file.seek(0); reader = PdfReader(pdf_file)
-    md = reader.metadata or {}
-    out = {}
-    for k, v in md.items():
-        out[k] = pdf_date_to_display_date(v) if k in ("/ModDate", "/CreationDate") else v
-    return out
-
-def update_pdf_metadata(pdf_file, new_md):
-    pdf_file.seek(0)
-    reader = PdfReader(pdf_file)
-    writer = PdfWriter()
-    for p in reader.pages: writer.add_page(p)
-    final_md = {}
-    for k, v in new_md.items():
-        final_md[k] = display_date_to_pdf_date(v) if k in ("/ModDate", "/CreationDate") else v
-    writer.add_metadata(final_md)
-    out = io.BytesIO(); writer.write(out); out.seek(0)
-    return out
+        y,M,d,H,m_,s_=m.groups()
+        try: return datetime(int(y),int(M),int(d),int(H),int(m_),int(s_)).strftime("%d/%m/%Y, %H:%M:%S")
+        except: return s
+    return s
+def display_date_to_pdf_date(s):
+    try: return datetime.strptime(s,"%d/%m/%Y, %H:%M:%S").strftime("D:%Y%m%d%H%M%S+03'00'")
+    except: return s
+def read_meta(f):
+    f.seek(0); r=PdfReader(f); md=r.metadata or {}
+    return {k:(pdf_date_to_display_date(md.get(k,"")) if k in ("/CreationDate","/ModDate") else md.get(k,"")) for k in ALL_KEYS}
+def write_meta(f, new):
+    f.seek(0); r=PdfReader(f); w=PdfWriter()
+    for p in r.pages: w.add_page(p)
+    final={}
+    for k,v in new.items():
+        final[k]=display_date_to_pdf_date(v) if k in ("/CreationDate","/ModDate") else v
+    w.add_metadata(final); out=io.BytesIO(); w.write(out); out.seek(0); return out
 
 # -----------------------------------------------------
 # الصف الأول: (الحاسبة) + (مولد QR)
 # -----------------------------------------------------
-c1, c2 = st.columns(2)
-
+c1,c2=st.columns(2)
 with c1:
     st.header("📊 حاسبة الضريبة")
-    total_incl = st.number_input("المبلغ شامل الضريبة", min_value=0.0, step=0.01)
-    tax_rate = st.number_input("نسبة الضريبة (%)", min_value=1.0, max_value=100.0, value=15.0, step=0.01)
-    if st.button("احسب الآن"):
-        rate = tax_rate / 100.0
-        before_tax = round(total_incl / (1 + rate), 2)
-        tax_amount = round(total_incl - before_tax, 2)
-        st.success(f"قبل الضريبة: {before_tax:.2f} | مبلغ الضريبة: {tax_amount:.2f}")
+    incl=st.number_input("المبلغ شامل الضريبة",0.0)
+    rate=st.number_input("نسبة الضريبة %",1.0,100.0,15.0)
+    if st.button("احسب"):
+        before=incl/(1+rate/100)
+        st.success(f"قبل الضريبة: {before:.2f} | الضريبة: {incl-before:.2f}")
 
 with c2:
-    st.header("🔖 مولّد رمز QR (ZATCA)")
-    vat_number = st.text_input("الرقم الضريبي (15 رقم)", max_chars=15)
-    seller_name = st.text_input("اسم البائع")
-    total_str = st.text_input("الإجمالي (شامل)")
-    vat_str   = st.text_input("الضريبة")
-    d_val = st.date_input("التاريخ", value=date.today())
-    t_val = st.time_input("الوقت", value=datetime.now().time().replace(second=0, microsecond=0), step=60)
-    if st.button("إنشاء رمز QR"):
-        vclean = _clean_vat(vat_number)
-        if len(vclean) != 15:
-            st.error("الرقم الضريبي يجب أن يكون 15 رقمًا.")
+    st.header("🔖 مولّد QR")
+    vat=st.text_input("الرقم الضريبي (15 رقم)")
+    seller=st.text_input("اسم البائع")
+    total=st.text_input("الإجمالي")
+    tax=st.text_input("الضريبة")
+    d=st.date_input("التاريخ",date.today())
+    t=st.time_input("الوقت",datetime.now().time().replace(second=0,microsecond=0))
+    if st.button("إنشاء QR"):
+        vat=_clean_vat(vat)
+        if len(vat)!=15: st.error("خطأ بالرقم الضريبي")
         else:
-            b64 = build_zatca_base64(seller_name.strip(), vclean, _iso_utc(d_val, t_val), _fmt2(total_str), _fmt2(vat_str))
-            st.code(b64, language="text")
-            img_bytes = make_qr_dense(b64)
-            st.image(img_bytes, caption="رمز QR ZATCA")
-            st.download_button("⬇️ تحميل QR", img_bytes, "zatca_qr.png", "image/png")
+            b64=build_zatca_base64(seller,vat,_iso_utc(d,t),_fmt2(total),_fmt2(tax))
+            img=make_qr(b64)
+            st.image(img); st.download_button("تحميل",img,"qr.png","image/png")
 
 # -----------------------------------------------------
-# الصف الثاني: (Code128) + (PDF Metadata)
+# الصف الثاني: (Code128) + (Metadata)
 # -----------------------------------------------------
-c3, c4 = st.columns(2)
-
+c3,c4=st.columns(2)
 with c3:
-    st.header("🧾 مولّد باركود Code-128 (1.86 × 0.31 inch @ 600 DPI)")
-    code128_val = st.text_input("أدخل الرقم/النص (Code-128)")
-    if st.button("إنشاء Code-128"):
-        s = sanitize(code128_val)
-        if not s:
-            st.error("أدخل نصًا صالحًا.")
+    st.header("🧾 Code128")
+    val=st.text_input("النص")
+    if st.button("إنشاء Code128"):
+        s=sanitize(val)
+        if not s: st.error("أدخل قيمة")
         else:
-            raw_png = render_barcode_png_bytes(s)
-            final_png = resize_to_exact(raw_png, px_from_in(WIDTH_IN, DPI), px_from_in(HEIGHT_IN, DPI))
-            st.image(final_png, caption=f"{WIDTH_IN}×{HEIGHT_IN} inch @ {DPI} DPI")
-            st.download_button("⬇️ تحميل Code-128", final_png, "code128.png", "image/png")
+            raw=render_code128(s); final=resize_code128(raw)
+            st.image(final); st.download_button("تحميل",final,"code128.png","image/png")
 
 with c4:
-    st.header("📑 أداة تعديل بيانات PDF Metadata")
-    up = st.file_uploader("قم بتحميل ملف PDF", type=["pdf"])
-    if up:
-        if "metadata" not in st.session_state:
-            st.session_state.metadata = read_pdf_metadata(up)
-
-        md = st.session_state.get("metadata", {})
-        if md:
-            # تهيئة مفاتيح session_state لكل الحقول مرة واحدة
-            for k, v in md.items():
-                if k not in st.session_state:
-                    st.session_state[k] = v
-
-            st.subheader("بيانات التعريف الحالية")
-            auto_sync = st.checkbox("تحديث تلقائي ثنائي الاتجاه بين ModDate و CreationDate (أثناء الكتابة)", key="sync_dates", value=True)
-
-            # --- مزامنة فورية قبل رسم الحقول (تجنّب خطأ Streamlit) ---
-            # تعقب آخر قيم لتمييز الحقل الذي تغيّر
-            if "md_last_creation" not in st.session_state:
-                st.session_state.md_last_creation = st.session_state.get("/CreationDate", "")
-            if "md_last_mod" not in st.session_state:
-                st.session_state.md_last_mod = st.session_state.get("/ModDate", "")
-
-            if auto_sync:
-                cur_c = st.session_state.get("/CreationDate", "")
-                cur_m = st.session_state.get("/ModDate", "")
-
-                # إذا تغيّر CreationDate عن آخر قيمة، انسخه إلى ModDate
-                if cur_c != st.session_state.md_last_creation:
-                    st.session_state["/ModDate"] = cur_c
-                    cur_m = cur_c
-
-                # إذا تغيّر ModDate عن آخر قيمة، انسخه إلى CreationDate
-                elif cur_m != st.session_state.md_last_mod:
-                    st.session_state["/CreationDate"] = cur_m
-                    cur_c = cur_m
-
-                # حدّث "آخر قيمة" للحلقة القادمة
-                st.session_state.md_last_creation = cur_c
-                st.session_state.md_last_mod = cur_m
-
-            # --- عرض كل الحقول (غير مرتبة) مع تفضيل ترتيب خاص للتاريخين ---
-            order_first = ["/ModDate", "/CreationDate"]
-            keys_ordered = order_first + [k for k in md.keys() if k not in order_first]
-
-            updated = {}
-            for k in keys_ordered:
-                disp = k[1:] if k.startswith("/") else k
-                val = st.text_input(disp, value=st.session_state.get(k, ""), key=k)
-                updated[k] = val  # تُستخدم عند الحفظ
-
-            if st.button("تحديث بيانات التعريف وحفظ الملف"):
-                out_pdf = update_pdf_metadata(up, updated)
-                if out_pdf:
-                    st.success("تم التحديث بنجاح ✅")
-                    st.download_button("تحميل الملف المعدّل", data=out_pdf, file_name=up.name, mime="application/pdf")
+    st.header("📑 Metadata PDF")
+    f=st.file_uploader("تحميل PDF",type=["pdf"])
+    if f:
+        if "meta" not in st.session_state: st.session_state.meta=read_meta(f)
+        auto=st.checkbox("تحديث تلقائي بين ModDate و CreationDate",True)
+        updated={}
+        for k in ALL_KEYS:
+            disp=k[1:]
+            val=st.session_state.meta.get(k,"")
+            new=st.text_input(disp,val,key=k)
+            updated[k]=new
+        # مزامنة ديناميكية ثنائية الاتجاه
+        if auto:
+            if updated["/CreationDate"]!=st.session_state.meta["/CreationDate"]:
+                updated["/ModDate"]=updated["/CreationDate"]
+            elif updated["/ModDate"]!=st.session_state.meta["/ModDate"]:
+                updated["/CreationDate"]=updated["/ModDate"]
+        st.session_state.meta=updated
+        if st.button("حفظ Metadata"):
+            out=write_meta(f,updated)
+            st.download_button("تحميل المعدل",out,f.name,"application/pdf")
