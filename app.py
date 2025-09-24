@@ -74,7 +74,7 @@ def make_qr(b64: str) -> bytes:
     out = BytesIO(); img.save(out, format="PNG"); return out.getvalue()
 
 # ================= Code128 (بدون هوامش وبالمقاس) =================
-WIDTH_IN, HEIGHT_IN, DPI = 1.86, 0.31, 600
+WIDTH_IN, HEIGHT_IN, DPI = 1.86, 0.34, 600
 ARABIC_DIGITS = str.maketrans("٠١٢٣٤٥٦٧٨٩", "0123456789")
 
 def sanitize(s: str) -> str:
@@ -275,3 +275,4 @@ with c4:
             img = make_qr(b64)
             st.image(img, caption="رمز QR ZATCA")
             st.download_button("⬇️ تحميل QR", img, "zatca_qr.png", "image/png")
+
