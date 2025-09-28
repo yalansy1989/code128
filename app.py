@@ -24,7 +24,7 @@ h1, h2, h3 { text-align:center; font-weight:700; }
 """, unsafe_allow_html=True)
 st.title("تصميــم يـــوســـــــف الأنســـــــــي")
 
-st.title("💰| حاسبة الضريبة| + (مولدQR (ZATCA) | + Code128 | + Edit Metadata")
+st.title("💰 حاسبة الضريبة| + | (مولدQR (ZATCA) | + Code128 | + Edit Metadata")
 
 # ================= حالة افتراضية ثابتة (مرة واحدة فقط) =================
 if "qr_initialized" not in st.session_state:
@@ -276,6 +276,7 @@ with c4:
             img = make_qr(b64)
             st.image(img, caption="رمز QR ZATCA")
             st.download_button("⬇️ تحميل QR", img, "zatca_qr.png", "image/png")
+
 
 
 
