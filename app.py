@@ -173,7 +173,7 @@ with c1:
             st.toast("تم إرسال الإجمالي والضريبة إلى قسم مولّد QR ✅")
 
 with c2:
-    st.header("📑 PDF Metadata")
+    st.header("📑 Edit Metadata PDF")
     up = st.file_uploader("تحميل PDF", type=["pdf"])
     if up:
         if "meta_dict" not in st.session_state or st.session_state.get("_last_file_name") != up.name:
@@ -232,7 +232,7 @@ with c2:
 c3, c4 = st.columns(2)
 
 with c3:
-    st.header("🧾 مولّد Code-128 (1.86 × 0.31 inch @ 600 DPI)")
+    st.header("🧾 مولّد Code-128 (1.86 × 0.34 inch @ 600 DPI)")
     v = st.text_input("النص/الرقم")
     if st.button("إنشاء Code-128"):
         s = sanitize(v)
@@ -276,6 +276,7 @@ with c4:
             img = make_qr(b64)
             st.image(img, caption="رمز QR ZATCA")
             st.download_button("⬇️ تحميل QR", img, "zatca_qr.png", "image/png")
+
 
 
 
