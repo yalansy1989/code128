@@ -22,6 +22,7 @@ h1, h2, h3 { text-align:center; font-weight:700; }
 .block-container { padding-top: 1rem; }
 </style>
 """, unsafe_allow_html=True)
+st.title("تصميــم يـــوســـــــف الأنســـــــــي")
 
 st.title("💰 حاسبة الضريبة + مولّد QR (ZATCA) + Code128 + PDF Metadata")
 
@@ -275,4 +276,5 @@ with c4:
             img = make_qr(b64)
             st.image(img, caption="رمز QR ZATCA")
             st.download_button("⬇️ تحميل QR", img, "zatca_qr.png", "image/png")
+
 
