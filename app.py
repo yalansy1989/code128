@@ -769,7 +769,7 @@ c1, c2 = st.columns(2)
 
 with c1:
     st.markdown('<div class="card glass-effect hover-lift">', unsafe_allow_html=True)
-    st.header("<i class='fas fa-calculator'></i> حاسبة الضريبة")
+    st.markdown('<h2><i class="fas fa-calculator"></i> حاسبة الضريبة</h2>', unsafe_allow_html=True)
     total_incl = st.number_input("المبلغ شامل الضريبة", min_value=0.0, step=0.01)
     tax_rate   = st.number_input("نسبة الضريبة (%)", min_value=1.0, max_value=100.0, value=15.0, step=0.01)
 
@@ -793,7 +793,7 @@ with c1:
 
 with c2:
     st.markdown('<div class="card glass-effect hover-lift">', unsafe_allow_html=True)
-    st.header("<i class='fas fa-file-pdf'></i> Edit Metadata PDF")
+    st.markdown('<h2><i class="fas fa-file-pdf"></i> Edit Metadata PDF</h2>', unsafe_allow_html=True)
     up = st.file_uploader("تحميل PDF", type=["pdf"])
     if up:
         if "meta_dict" not in st.session_state or st.session_state.get("_last_file_name") != up.name:
@@ -854,7 +854,7 @@ c3, c4 = st.columns(2)
 
 with c3:
     st.markdown('<div class="card glass-effect hover-lift">', unsafe_allow_html=True)
-    st.header("<i class='fas fa-barcode'></i> مولّد Code-128 (1.86 × 0.34 inch @ 600 DPI)")
+    st.markdown('<h2><i class="fas fa-barcode"></i> مولّد Code-128 (1.86 × 0.34 inch @ 600 DPI)</h2>', unsafe_allow_html=True)
     v = st.text_input("النص/الرقم")
     if st.button("إنشاء Code-128"):
         s = sanitize(v)
@@ -870,7 +870,7 @@ with c3:
 
 with c4:
     st.markdown('<div class="card glass-effect hover-lift">', unsafe_allow_html=True)
-    st.header("<i class='fas fa-qrcode'></i> مولّد QR (ZATCA)")
+    st.markdown('<h2><i class="fas fa-qrcode"></i> مولّد QR (ZATCA)</h2>', unsafe_allow_html=True)
 
     st.text_input("الرقم الضريبي (15 رقم)", key="qr_vat_number")
     st.text_input("اسم البائع", key="qr_seller")
