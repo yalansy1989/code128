@@ -17,31 +17,99 @@ st.set_page_config(page_title="حاسبة + ZATCA + Code128 + PDF Metadata", pag
 
 # إضافة CSS للتصميم العصري مع الأيقونات التفاعلية
 st.markdown("""
+<link href="https://fonts.googleapis.com/css2?family=Cairo:wght@400;600;700&display=swap" rel="stylesheet">
 <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.4.0/css/all.min.css">
 <style>
-    /* التصميم العام */
-    :root {
-        --primary: #046307;
-        --secondary: #2a9d8f;
-        --accent: #e9c46a;
-        --dark: #264653;
-        --light: #f8f9fa;
-        --shadow: 0 4px 12px rgba(0,0,0,0.1);
-        --transition: all 0.3s ease;
-    }
-    
+    /* تحسينات للخط العربي */
     body {
-        font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif;
-        background: linear-gradient(135deg, #f5f7fa 0%, #c3cfe2 100%);
-        color: var(--dark);
+        font-family: 'Cairo', 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif;
+        font-feature-settings: "kern" 1, "liga" 1, "calt" 1;
+        text-rendering: optimizeLegibility;
+        -webkit-font-smoothing: antialiased;
+        -moz-osx-font-smoothing: grayscale;
+        background: linear-gradient(135deg, #1a1a2e 0%, #16213e 50%, #0f3460 100%);
+        color: #ffffff;
     }
     
+    /* متغيرات CSS للألوان والأبعاد */
+    :root {
+        --primary-gradient: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+        --secondary-gradient: linear-gradient(45deg, #f093fb 0%, #f5576c 100%);
+        --success-gradient: linear-gradient(45deg, #4facfe 0%, #00f2fe 100%);
+        --glass-bg: rgba(255, 255, 255, 0.1);
+        --glass-border: rgba(255, 255, 255, 0.2);
+        --shadow-light: 0 8px 32px rgba(31, 38, 135, 0.37);
+        --shadow-heavy: 0 20px 40px rgba(0, 0, 0, 0.2);
+        --border-radius: 16px;
+        --transition-fast: 0.2s ease;
+        --transition-normal: 0.3s ease;
+        --transition-slow: 0.5s ease;
+    }
+    
+    /* تحسينات Glass Morphism */
+    .glass-effect {
+        background: var(--glass-bg);
+        backdrop-filter: blur(20px);
+        -webkit-backdrop-filter: blur(20px);
+        border: 1px solid var(--glass-border);
+        box-shadow: var(--shadow-light);
+    }
+    
+    /* تأثيرات الهوفر المحسنة */
+    .hover-lift {
+        transition: transform var(--transition-normal), box-shadow var(--transition-normal);
+    }
+    
+    .hover-lift:hover {
+        transform: translateY(-8px) scale(1.02);
+        box-shadow: var(--shadow-heavy);
+    }
+    
+    /* أنيميشن النبض المحسن */
+    .pulse-glow {
+        animation: pulseGlow 2s ease-in-out infinite;
+    }
+    
+    @keyframes pulseGlow {
+        0%, 100% {
+            box-shadow: 0 0 20px rgba(255, 255, 255, 0.3);
+        }
+        50% {
+            box-shadow: 0 0 40px rgba(255, 255, 255, 0.6);
+        }
+    }
+    
+    /* تأثير الموج للأزرار */
+    .ripple {
+        position: relative;
+        overflow: hidden;
+    }
+    
+    .ripple:before {
+        content: '';
+        position: absolute;
+        top: 50%;
+        left: 50%;
+        width: 0;
+        height: 0;
+        border-radius: 50%;
+        background: rgba(255, 255, 255, 0.6);
+        transform: translate(-50%, -50%);
+        transition: width 0.6s, height 0.6s;
+    }
+    
+    .ripple:active:before {
+        width: 300px;
+        height: 300px;
+    }
+    
+    /* التصميم العام */
     .main-header {
-        background: linear-gradient(90deg, var(--primary), var(--secondary));
-        padding: 1.5rem;
-        border-radius: 15px;
+        background: var(--primary-gradient);
+        padding: 2rem;
+        border-radius: var(--border-radius);
         margin-bottom: 2rem;
-        box-shadow: var(--shadow);
+        box-shadow: var(--shadow-heavy);
         text-align: center;
         color: white;
         position: relative;
@@ -79,7 +147,7 @@ st.markdown("""
     h1, h2, h3 {
         text-align: center;
         font-weight: 700;
-        color: var(--primary);
+        color: #ffffff;
         margin-bottom: 1.5rem;
         position: relative;
     }
@@ -92,7 +160,7 @@ st.markdown("""
         transform: translateX(-50%);
         width: 80px;
         height: 3px;
-        background: var(--accent);
+        background: var(--secondary-gradient);
         border-radius: 3px;
     }
     
@@ -102,12 +170,15 @@ st.markdown("""
     
     /* تصميم البطاقات */
     .card {
-        background: white;
-        border-radius: 15px;
+        background: var(--glass-bg);
+        backdrop-filter: blur(20px);
+        -webkit-backdrop-filter: blur(20px);
+        border: 1px solid var(--glass-border);
+        border-radius: var(--border-radius);
         padding: 1.5rem;
-        box-shadow: var(--shadow);
+        box-shadow: var(--shadow-light);
         margin-bottom: 1.5rem;
-        transition: var(--transition);
+        transition: var(--transition-normal);
         position: relative;
         overflow: hidden;
     }
@@ -119,13 +190,13 @@ st.markdown("""
         left: 0;
         width: 5px;
         height: 100%;
-        background: var(--secondary);
-        transition: var(--transition);
+        background: var(--secondary-gradient);
+        transition: var(--transition-normal);
     }
     
     .card:hover {
         transform: translateY(-5px);
-        box-shadow: 0 8px 24px rgba(0,0,0,0.15);
+        box-shadow: var(--shadow-heavy);
     }
     
     .card:hover::before {
@@ -135,14 +206,14 @@ st.markdown("""
     
     /* تصميم الأزرار */
     div[data-testid="stButton"] > button {
-        background: linear-gradient(90deg, var(--primary), var(--secondary));
+        background: var(--primary-gradient);
         color: white;
         border: none;
         border-radius: 50px;
         padding: 0.6rem 1.5rem;
         font-weight: 600;
-        transition: var(--transition);
-        box-shadow: 0 4px 8px rgba(0,0,0,0.1);
+        transition: var(--transition-normal);
+        box-shadow: var(--shadow-light);
         position: relative;
         overflow: hidden;
         display: flex;
@@ -159,7 +230,7 @@ st.markdown("""
         width: 100%;
         height: 100%;
         background: rgba(255,255,255,0.2);
-        transition: var(--transition);
+        transition: var(--transition-normal);
     }
     
     div[data-testid="stButton"] > button:hover::before {
@@ -168,7 +239,7 @@ st.markdown("""
     
     div[data-testid="stButton"] > button:hover {
         transform: translateY(-3px);
-        box-shadow: 0 6px 12px rgba(0,0,0,0.15);
+        box-shadow: var(--shadow-heavy);
     }
     
     div[data-testid="stButton"] > button:active {
@@ -177,55 +248,71 @@ st.markdown("""
     
     /* تصميم حقول الإدخال */
     div[data-testid="stTextInput"] > div > div > input {
+        background: var(--glass-bg);
+        backdrop-filter: blur(10px);
+        -webkit-backdrop-filter: blur(10px);
+        border: 1px solid var(--glass-border);
         border-radius: 10px;
-        border: 2px solid #e0e0e0;
         padding: 0.8rem 1rem;
-        transition: var(--transition);
+        transition: var(--transition-normal);
         font-size: 1rem;
+        color: #ffffff;
     }
     
     div[data-testid="stTextInput"] > div > div > input:focus {
-        border-color: var(--secondary);
-        box-shadow: 0 0 0 3px rgba(42, 157, 143, 0.2);
+        border-color: #667eea;
+        box-shadow: 0 0 0 3px rgba(102, 126, 234, 0.3);
     }
     
     div[data-testid="stNumberInput"] > div > div > input {
+        background: var(--glass-bg);
+        backdrop-filter: blur(10px);
+        -webkit-backdrop-filter: blur(10px);
+        border: 1px solid var(--glass-border);
         border-radius: 10px;
-        border: 2px solid #e0e0e0;
         padding: 0.8rem 1rem;
-        transition: var(--transition);
+        transition: var(--transition-normal);
         font-size: 1rem;
+        color: #ffffff;
     }
     
     div[data-testid="stNumberInput"] > div > div > input:focus {
-        border-color: var(--secondary);
-        box-shadow: 0 0 0 3px rgba(42, 157, 143, 0.2);
+        border-color: #667eea;
+        box-shadow: 0 0 0 3px rgba(102, 126, 234, 0.3);
     }
     
     div[data-testid="stDateInput"] > div > div > input {
+        background: var(--glass-bg);
+        backdrop-filter: blur(10px);
+        -webkit-backdrop-filter: blur(10px);
+        border: 1px solid var(--glass-border);
         border-radius: 10px;
-        border: 2px solid #e0e0e0;
         padding: 0.8rem 1rem;
-        transition: var(--transition);
+        transition: var(--transition-normal);
         font-size: 1rem;
+        color: #ffffff;
     }
     
     div[data-testid="stDateInput"] > div > div > input:focus {
-        border-color: var(--secondary);
-        box-shadow: 0 0 0 3px rgba(42, 157, 143, 0.2);
+        border-color: #667eea;
+        box-shadow: 0 0 0 3px rgba(102, 126, 234, 0.3);
     }
     
     div[data-testid="stTimeInput"] > div > div > input {
+        background: var(--glass-bg);
+        backdrop-filter: blur(10px);
+        -webkit-backdrop-filter: blur(10px);
+        border: 1px solid var(--glass-border);
         border-radius: 10px;
-        border: 2px solid #e0e0e0;
         padding: 0.8rem 1rem;
-        transition: var(--transition);
+        transition: var(--transition-normal);
         font-size: 1rem;
+        color: #ffffff;
     }
     
     div[data-testid="stTimeInput"] > div > div > input:focus {
-        border-color: var(--secondary);
-        box-shadow: 0 0 0 3px rgba(42, 157, 143, 0.2);
+        border-color: #667eea;
+        box-shadow: 0 0 0 3px rgba(102, 126, 234, 0.3);
     }
     
     /* تصميم الأيقونات التفاعلية */
@@ -241,7 +328,7 @@ st.markdown("""
         align-items: center;
         margin: 0 1.5rem;
         cursor: pointer;
-        transition: var(--transition);
+        transition: var(--transition-normal);
     }
     
     .icon-item:hover {
@@ -250,54 +337,75 @@ st.markdown("""
     
     .icon-item i {
         font-size: 2.5rem;
-        color: var(--primary);
+        color: #667eea;
         margin-bottom: 0.5rem;
-        transition: var(--transition);
+        transition: var(--transition-normal);
     }
     
     .icon-item:hover i {
-        color: var(--secondary);
+        color: #f093fb;
         transform: scale(1.2);
     }
     
     .icon-item span {
         font-size: 0.9rem;
         font-weight: 600;
-        color: var(--dark);
+        color: #ffffff;
     }
     
     /* تصميم رسائل النجاح والخطأ */
     div[data-testid="stException"] {
-        background-color: #ffebee;
+        background-color: rgba(244, 67, 54, 0.2);
         border-left: 5px solid #f44336;
         padding: 1rem;
         border-radius: 5px;
         margin: 1rem 0;
+        color: #ffffff;
     }
     
     div[data-testid="stSuccess"] {
-        background-color: #e8f5e9;
+        background-color: rgba(76, 175, 80, 0.2);
         border-left: 5px solid #4caf50;
         padding: 1rem;
         border-radius: 5px;
         margin: 1rem 0;
+        color: #ffffff;
     }
     
     /* تصميم شريط التقدم */
     .progress-container {
         height: 8px;
-        background: #e0e0e0;
+        background: rgba(255, 255, 255, 0.1);
         border-radius: 5px;
         margin: 1.5rem 0;
         overflow: hidden;
+        position: relative;
     }
     
     .progress-bar {
         height: 100%;
-        background: linear-gradient(90deg, var(--primary), var(--secondary));
+        background: var(--success-gradient);
         border-radius: 5px;
         width: 0%;
         transition: width 1s ease-in-out;
+        position: relative;
+        overflow: hidden;
+    }
+    
+    .progress-bar::before {
+        content: '';
+        position: absolute;
+        top: 0;
+        left: -100%;
+        width: 100%;
+        height: 100%;
+        background: linear-gradient(90deg, transparent, rgba(255, 255, 255, 0.4), transparent);
+        animation: shimmer 2s infinite;
+    }
+    
+    @keyframes shimmer {
+        0% { left: -100%; }
+        100% { left: 100%; }
     }
     
     /* تصميم عناصر التبويب */
@@ -310,24 +418,27 @@ st.markdown("""
     .tab-item {
         padding: 0.8rem 1.5rem;
         margin: 0 0.5rem;
-        background: white;
+        background: var(--glass-bg);
+        backdrop-filter: blur(10px);
+        -webkit-backdrop-filter: blur(10px);
+        border: 1px solid var(--glass-border);
         border-radius: 50px;
         cursor: pointer;
-        transition: var(--transition);
-        box-shadow: 0 2px 5px rgba(0,0,0,0.1);
+        transition: var(--transition-normal);
+        box-shadow: var(--shadow-light);
         font-weight: 600;
-        color: var(--dark);
+        color: #ffffff;
     }
     
     .tab-item:hover {
-        background: var(--secondary);
+        background: var(--secondary-gradient);
         color: white;
         transform: translateY(-3px);
-        box-shadow: 0 4px 8px rgba(0,0,0,0.15);
+        box-shadow: var(--shadow-heavy);
     }
     
     .tab-item.active {
-        background: var(--primary);
+        background: var(--primary-gradient);
         color: white;
     }
     
@@ -341,13 +452,13 @@ st.markdown("""
     .image-container img {
         max-width: 100%;
         border-radius: 10px;
-        box-shadow: var(--shadow);
-        transition: var(--transition);
+        box-shadow: var(--shadow-heavy);
+        transition: var(--transition-normal);
     }
     
     .image-container img:hover {
         transform: scale(1.02);
-        box-shadow: 0 8px 16px rgba(0,0,0,0.2);
+        box-shadow: 0 8px 16px rgba(0,0,0,0.3);
     }
     
     /* تصميم الفوتر */
@@ -355,7 +466,7 @@ st.markdown("""
         text-align: center;
         margin-top: 3rem;
         padding: 1.5rem;
-        color: var(--dark);
+        color: #ffffff;
         font-size: 0.9rem;
     }
     
@@ -373,6 +484,125 @@ st.markdown("""
             font-size: 2rem;
         }
     }
+    
+    /* تأثير الجسيمات للخلفية */
+    .particles {
+        position: fixed;
+        top: 0;
+        left: 0;
+        width: 100%;
+        height: 100%;
+        pointer-events: none;
+        z-index: -1;
+    }
+    
+    .particle {
+        position: absolute;
+        width: 2px;
+        height: 2px;
+        background: rgba(255, 255, 255, 0.3);
+        border-radius: 50%;
+        animation: float 6s ease-in-out infinite;
+    }
+    
+    @keyframes float {
+        0%, 100% {
+            transform: translateY(0px) rotate(0deg);
+            opacity: 0.3;
+        }
+        50% {
+            transform: translateY(-20px) rotate(180deg);
+            opacity: 0.8;
+        }
+    }
+    
+    /* تأثير الموج عند الضغط */
+    .ripple-effect {
+        position: absolute;
+        border-radius: 50%;
+        background: rgba(255, 255, 255, 0.6);
+        transform: scale(0);
+        animation: ripple-animation 0.6s linear;
+        pointer-events: none;
+    }
+    
+    @keyframes ripple-animation {
+        to {
+            transform: scale(4);
+            opacity: 0;
+        }
+    }
+    
+    /* تحسين الـ scrollbar */
+    ::-webkit-scrollbar {
+        width: 8px;
+    }
+    
+    ::-webkit-scrollbar-track {
+        background: rgba(255, 255, 255, 0.1);
+        border-radius: 4px;
+    }
+    
+    ::-webkit-scrollbar-thumb {
+        background: var(--secondary-gradient);
+        border-radius: 4px;
+    }
+    
+    ::-webkit-scrollbar-thumb:hover {
+        background: var(--success-gradient);
+    }
+    
+    /* تحسينات للوضع الليلي */
+    @media (prefers-color-scheme: dark) {
+        :root {
+            --glass-bg: rgba(0, 0, 0, 0.3);
+            --glass-border: rgba(255, 255, 255, 0.1);
+        }
+    }
+    
+    /* تحسينات للحركة المحدودة */
+    @media (prefers-reduced-motion: reduce) {
+        * {
+            animation-duration: 0.01ms !important;
+            animation-iteration-count: 1 !important;
+            transition-duration: 0.01ms !important;
+        }
+    }
+    
+    /* تأثيرات التركيز للوحة المفاتيح */
+    .focus-visible:focus-visible {
+        outline: 2px solid #4ade80;
+        outline-offset: 2px;
+    }
+    
+    button:focus-visible,
+    input:focus-visible {
+        outline: 2px solid #3b82f6;
+        outline-offset: 2px;
+    }
+    
+    /* تأثير النصوص المتدرجة */
+    .gradient-text {
+        background: var(--secondary-gradient);
+        -webkit-background-clip: text;
+        -webkit-text-fill-color: transparent;
+        background-clip: text;
+        font-weight: bold;
+    }
+    
+    /* تأثير الظهور التدريجي */
+    .fade-in {
+        animation: fadeIn 0.6s ease-out;
+    }
+    
+    @keyframes fadeIn {
+        from {
+            opacity: 0;
+        }
+        to {
+            opacity: 1;
+        }
+    }
 </style>
 """, unsafe_allow_html=True)
 
@@ -387,20 +617,20 @@ st.markdown("""
 # إضافة أيقونات تفاعلية
 st.markdown("""
 <div class="icon-container">
-    <div class="icon-item">
-        <i class="fas fa-calculator"></i>
+    <div class="icon-item hover-lift">
+        <i class="fas fa-calculator pulse-glow"></i>
         <span>حاسبة الضريبة</span>
     </div>
-    <div class="icon-item">
-        <i class="fas fa-qrcode"></i>
+    <div class="icon-item hover-lift">
+        <i class="fas fa-qrcode pulse-glow"></i>
         <span>رمز QR</span>
     </div>
-    <div class="icon-item">
-        <i class="fas fa-barcode"></i>
+    <div class="icon-item hover-lift">
+        <i class="fas fa-barcode pulse-glow"></i>
         <span>باركود</span>
     </div>
-    <div class="icon-item">
-        <i class="fas fa-file-pdf"></i>
+    <div class="icon-item hover-lift">
+        <i class="fas fa-file-pdf pulse-glow"></i>
         <span>ملف PDF</span>
     </div>
 </div>
@@ -538,7 +768,7 @@ def write_meta(file, new_md):
 c1, c2 = st.columns(2)
 
 with c1:
-    st.markdown('<div class="card">', unsafe_allow_html=True)
+    st.markdown('<div class="card glass-effect hover-lift">', unsafe_allow_html=True)
     st.header("📊 حاسبة الضريبة")
     total_incl = st.number_input("المبلغ شامل الضريبة", min_value=0.0, step=0.01)
     tax_rate   = st.number_input("نسبة الضريبة (%)", min_value=1.0, max_value=100.0, value=15.0, step=0.01)
@@ -562,7 +792,7 @@ with c1:
     st.markdown('</div>', unsafe_allow_html=True)
 
 with c2:
-    st.markdown('<div class="card">', unsafe_allow_html=True)
+    st.markdown('<div class="card glass-effect hover-lift">', unsafe_allow_html=True)
     st.header("📑 Edit Metadata PDF")
     up = st.file_uploader("تحميل PDF", type=["pdf"])
     if up:
@@ -623,7 +853,7 @@ with c2:
 c3, c4 = st.columns(2)
 
 with c3:
-    st.markdown('<div class="card">', unsafe_allow_html=True)
+    st.markdown('<div class="card glass-effect hover-lift">', unsafe_allow_html=True)
     st.header("🧾 مولّد Code-128 (1.86 × 0.34 inch @ 600 DPI)")
     v = st.text_input("النص/الرقم")
     if st.button("إنشاء Code-128"):
@@ -639,7 +869,7 @@ with c3:
     st.markdown('</div>', unsafe_allow_html=True)
 
 with c4:
-    st.markdown('<div class="card">', unsafe_allow_html=True)
+    st.markdown('<div class="card glass-effect hover-lift">', unsafe_allow_html=True)
     st.header("🔖 مولّد QR (ZATCA)")
 
     st.text_input("الرقم الضريبي (15 رقم)", key="qr_vat_number")
@@ -695,16 +925,6 @@ st.markdown("""
             }, 500);
         }
         
-        // تأثير التمرير السلس
-        document.querySelectorAll('a[href^="#"]').forEach(anchor => {
-            anchor.addEventListener('click', function (e) {
-                e.preventDefault();
-                document.querySelector(this.getAttribute('href')).scrollIntoView({
-                    behavior: 'smooth'
-                });
-            });
-        });
-        
         // تأثير الظهور عند التمرير
         const observerOptions = {
             root: null,
@@ -726,6 +946,13 @@ st.markdown("""
             card.style.transform = 'translateY(20px)';
             card.style.transition = 'opacity 0.6s ease, transform 0.6s ease';
             observer.observe(card);
+        });
+        
+        // تأثير النبض للأيقونات
+        document.querySelectorAll('.pulse-glow').forEach(icon => {
+            setInterval(() => {
+                icon.style.boxShadow = '0 0 ' + (Math.random() * 20 + 20) + 'px rgba(255, 255, 255, ' + (Math.random() * 0.3 + 0.3) + ')';
+            }, 2000);
         });
     });
 </script>
