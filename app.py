@@ -927,7 +927,7 @@ c3, c4 = st.columns(2)
 
 with c3:
     st.markdown('<div class="card glass-effect hover-lift">', unsafe_allow_html=True)
-    st.markdown('<h2><i class="fas fa-barcode"></i> مولّد Code-128 (1.86 × 0.34 inch @ 600 DPI)</h2>', unsafe_allow_html=True)
+    st.markdown('<h2><i class="fas fa-barcode"></i> مولّد Code-128</h2>', unsafe_allow_html=True)
     v = st.text_input("النص/الرقم")
     if st.button("إنشاء Code-128"):
         s = sanitize(v)
@@ -1078,3 +1078,4 @@ st.markdown("""
     });
 </script>
 """, unsafe_allow_html=True)
+
