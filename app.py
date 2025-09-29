@@ -705,29 +705,15 @@ if "qr_initialized" not in st.session_state:
     })
     st.session_state["qr_initialized"] = True
 
-# ================= دالة لتغيير لون الرقم الضريبي =================
+# ================= دالة لتغيير لون الرقم الضريبي ومنع الإدخال بعد 15 رقم =================
 def update_vat_color():
     vat_number = st.session_state.get("qr_vat_number", "")
     vat_clean = _clean_vat(vat_number)
     
-    # إضافة JavaScript لتغيير لون النص
-    st.markdown(f"""
-    <script>
-        document.addEventListener('DOMContentLoaded', function() {{
-            const vatInput = window.parent.document.querySelector('input[data-testid="stTextInput"]');
-            if (vatInput && vatInput.value.includes('الرقم الضريبي')) {{
-                const actualInput = vatInput.parentElement.querySelector('input');
-                if (actualInput) {{
-                    if ('{vat_clean}'.length === 15) {{
-                        actualInput.classList.add('vat-valid');
-                    }} else {{
-                        actualInput.classList.remove('vat-valid');
-                    }}
-                }}
-            }}
-        }});
-    </script>
-    """, unsafe_allow_html=True)
+    # إذا تجاوز العدد 15 رقم، قص القيمة إلى 15 رقم فقط
+    if len(vat_clean) > 15:
+        st.session_state["qr_vat_number"] = vat_clean[:15]
+        vat_clean = vat_clean[:15]
     
     # التحقق إذا كان الرقم الضريبي مخزن مسبقاً
     if len(vat_clean) == 15 and vat_clean in st.session_state["vat_sellers"]:
@@ -959,8 +945,8 @@ with c4:
     st.markdown('<div class="card glass-effect hover-lift">', unsafe_allow_html=True)
     st.markdown('<h2><i class="fas fa-qrcode"></i> مولّد QR (ZATCA)</h2>', unsafe_allow_html=True)
 
-    # حقل الرقم الضريبي مع التحقق من الطول
-    st.text_input("الرقم الضريبي (15 رقم)", key="qr_vat_number", on_change=update_vat_color)
+    # حقل الرقم الضريبي مع التحقق من الطول ومنع الإدخال بعد 15 رقم
+    st.text_input("الرقم الضريبي (15 رقم)", key="qr_vat_number", on_change=update_vat_color, max_chars=15)
     
     # عرض عدد الأرقام المدخلة
     vat_number = st.session_state.get("qr_vat_number", "")
@@ -1051,13 +1037,37 @@ st.markdown("""
             }, 2000);
         });
         
-        // تغيير لون الرقم الضريبي للأخضر عند بلوغ 15 رقم
+        // تغيير لون الرقم الضريبي للأخضر عند بلوغ 15 رقم ومنع الإدخال بعد ذلك
         const vatInputs = document.querySelectorAll('input[data-testid="stTextInput"]');
         vatInputs.forEach(input => {
             if (input.placeholder && input.placeholder.includes('الرقم الضريبي')) {
-                input.addEventListener('input', function() {
-                    const cleanValue = this.value.replace(/\\D/g, '');
-                    if (cleanValue.length === 15) {
+                // منع إدخال غير الأرقام
+                input.addEventListener('input', function(e) {
+                    // السماح فقط بالأرقام
+                    this.value = this.value.replace(/\\D/g, '');
+                    
+                    // منع الإدخال بعد 15 رقم
+                    if (this.value.length > 15) {
+                        this.value = this.value.substring(0, 15);
+                    }
+                    
+                    // تغيير اللون عند الوصول لـ 15 رقم
+                    if (this.value.length === 15) {
+                        this.classList.add('vat-valid');
+                    } else {
+                        this.classList.remove('vat-valid');
+                    }
+                });
+                
+                // منع اللصق إذا كان يحتوي على غير أرقام أو أكثر من 15 رقم
+                input.addEventListener('paste', function(e) {
+                    e.preventDefault();
+                    const pastedData = e.clipboardData.getData('text');
+                    const cleanData = pastedData.replace(/\\D/g, '').substring(0, 15);
+                    this.value = cleanData;
+                    
+                    // تغيير اللون عند الوصول لـ 15 رقم
+                    if (this.value.length === 15) {
                         this.classList.add('vat-valid');
                     } else {
                         this.classList.remove('vat-valid');
