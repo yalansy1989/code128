@@ -909,7 +909,8 @@ with c4:
 # إضافة الفوتر
 st.markdown("""
 <div class="footer">
-    <p>تصميم وتطوير: يوسف الأنسي © 2023 | جميع الحقوق محفوظة</p>
+    <p>تصميم وتطوير: يوسف الأنسي © 2025 | جميع الحقوق محفوظة</p>
+    <p>0500900934</p>
 </div>
 """, unsafe_allow_html=True)
 
@@ -957,4 +958,5 @@ st.markdown("""
     });
 </script>
 """, unsafe_allow_html=True)
+
 
