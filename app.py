@@ -14,17 +14,404 @@ from pypdf import PdfReader, PdfWriter
 
 # ================= إعداد عام + تنسيق =================
 st.set_page_config(page_title="حاسبة + ZATCA + Code128 + PDF Metadata", page_icon="💰", layout="wide")
+
+# إضافة CSS للتصميم العصري مع الأيقونات التفاعلية
 st.markdown("""
+<link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.4.0/css/all.min.css">
 <style>
-h1, h2, h3 { text-align:center; font-weight:700; }
-@media (prefers-color-scheme: light) { h1, h2, h3 { color:#046307 !important; } }
-@media (prefers-color-scheme: dark)  { h1, h2, h3 { color:#ffffff !important; } }
-.block-container { padding-top: 1rem; }
+    /* التصميم العام */
+    :root {
+        --primary: #046307;
+        --secondary: #2a9d8f;
+        --accent: #e9c46a;
+        --dark: #264653;
+        --light: #f8f9fa;
+        --shadow: 0 4px 12px rgba(0,0,0,0.1);
+        --transition: all 0.3s ease;
+    }
+    
+    body {
+        font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif;
+        background: linear-gradient(135deg, #f5f7fa 0%, #c3cfe2 100%);
+        color: var(--dark);
+    }
+    
+    .main-header {
+        background: linear-gradient(90deg, var(--primary), var(--secondary));
+        padding: 1.5rem;
+        border-radius: 15px;
+        margin-bottom: 2rem;
+        box-shadow: var(--shadow);
+        text-align: center;
+        color: white;
+        position: relative;
+        overflow: hidden;
+    }
+    
+    .main-header::before {
+        content: "";
+        position: absolute;
+        top: -50%;
+        right: -50%;
+        width: 200%;
+        height: 200%;
+        background: radial-gradient(circle, rgba(255,255,255,0.2) 0%, rgba(255,255,255,0) 70%);
+        transform: rotate(45deg);
+        z-index: 1;
+    }
+    
+    .main-header h1 {
+        font-size: 2.5rem;
+        margin: 0;
+        position: relative;
+        z-index: 2;
+        text-shadow: 2px 2px 4px rgba(0,0,0,0.2);
+    }
+    
+    .main-header .subtitle {
+        font-size: 1.2rem;
+        margin-top: 0.5rem;
+        opacity: 0.9;
+        position: relative;
+        z-index: 2;
+    }
+    
+    h1, h2, h3 {
+        text-align: center;
+        font-weight: 700;
+        color: var(--primary);
+        margin-bottom: 1.5rem;
+        position: relative;
+    }
+    
+    h1::after, h2::after, h3::after {
+        content: "";
+        position: absolute;
+        bottom: -10px;
+        left: 50%;
+        transform: translateX(-50%);
+        width: 80px;
+        height: 3px;
+        background: var(--accent);
+        border-radius: 3px;
+    }
+    
+    .block-container {
+        padding-top: 1rem;
+    }
+    
+    /* تصميم البطاقات */
+    .card {
+        background: white;
+        border-radius: 15px;
+        padding: 1.5rem;
+        box-shadow: var(--shadow);
+        margin-bottom: 1.5rem;
+        transition: var(--transition);
+        position: relative;
+        overflow: hidden;
+    }
+    
+    .card::before {
+        content: "";
+        position: absolute;
+        top: 0;
+        left: 0;
+        width: 5px;
+        height: 100%;
+        background: var(--secondary);
+        transition: var(--transition);
+    }
+    
+    .card:hover {
+        transform: translateY(-5px);
+        box-shadow: 0 8px 24px rgba(0,0,0,0.15);
+    }
+    
+    .card:hover::before {
+        width: 100%;
+        opacity: 0.1;
+    }
+    
+    /* تصميم الأزرار */
+    div[data-testid="stButton"] > button {
+        background: linear-gradient(90deg, var(--primary), var(--secondary));
+        color: white;
+        border: none;
+        border-radius: 50px;
+        padding: 0.6rem 1.5rem;
+        font-weight: 600;
+        transition: var(--transition);
+        box-shadow: 0 4px 8px rgba(0,0,0,0.1);
+        position: relative;
+        overflow: hidden;
+        display: flex;
+        align-items: center;
+        justify-content: center;
+        gap: 8px;
+    }
+    
+    div[data-testid="stButton"] > button::before {
+        content: "";
+        position: absolute;
+        top: 0;
+        left: -100%;
+        width: 100%;
+        height: 100%;
+        background: rgba(255,255,255,0.2);
+        transition: var(--transition);
+    }
+    
+    div[data-testid="stButton"] > button:hover::before {
+        left: 100%;
+    }
+    
+    div[data-testid="stButton"] > button:hover {
+        transform: translateY(-3px);
+        box-shadow: 0 6px 12px rgba(0,0,0,0.15);
+    }
+    
+    div[data-testid="stButton"] > button:active {
+        transform: translateY(1px);
+    }
+    
+    /* تصميم حقول الإدخال */
+    div[data-testid="stTextInput"] > div > div > input {
+        border-radius: 10px;
+        border: 2px solid #e0e0e0;
+        padding: 0.8rem 1rem;
+        transition: var(--transition);
+        font-size: 1rem;
+    }
+    
+    div[data-testid="stTextInput"] > div > div > input:focus {
+        border-color: var(--secondary);
+        box-shadow: 0 0 0 3px rgba(42, 157, 143, 0.2);
+    }
+    
+    div[data-testid="stNumberInput"] > div > div > input {
+        border-radius: 10px;
+        border: 2px solid #e0e0e0;
+        padding: 0.8rem 1rem;
+        transition: var(--transition);
+        font-size: 1rem;
+    }
+    
+    div[data-testid="stNumberInput"] > div > div > input:focus {
+        border-color: var(--secondary);
+        box-shadow: 0 0 0 3px rgba(42, 157, 143, 0.2);
+    }
+    
+    div[data-testid="stDateInput"] > div > div > input {
+        border-radius: 10px;
+        border: 2px solid #e0e0e0;
+        padding: 0.8rem 1rem;
+        transition: var(--transition);
+        font-size: 1rem;
+    }
+    
+    div[data-testid="stDateInput"] > div > div > input:focus {
+        border-color: var(--secondary);
+        box-shadow: 0 0 0 3px rgba(42, 157, 143, 0.2);
+    }
+    
+    div[data-testid="stTimeInput"] > div > div > input {
+        border-radius: 10px;
+        border: 2px solid #e0e0e0;
+        padding: 0.8rem 1rem;
+        transition: var(--transition);
+        font-size: 1rem;
+    }
+    
+    div[data-testid="stTimeInput"] > div > div > input:focus {
+        border-color: var(--secondary);
+        box-shadow: 0 0 0 3px rgba(42, 157, 143, 0.2);
+    }
+    
+    /* تصميم الأيقونات التفاعلية */
+    .icon-container {
+        display: flex;
+        justify-content: center;
+        margin: 1.5rem 0;
+    }
+    
+    .icon-item {
+        display: flex;
+        flex-direction: column;
+        align-items: center;
+        margin: 0 1.5rem;
+        cursor: pointer;
+        transition: var(--transition);
+    }
+    
+    .icon-item:hover {
+        transform: translateY(-5px);
+    }
+    
+    .icon-item i {
+        font-size: 2.5rem;
+        color: var(--primary);
+        margin-bottom: 0.5rem;
+        transition: var(--transition);
+    }
+    
+    .icon-item:hover i {
+        color: var(--secondary);
+        transform: scale(1.2);
+    }
+    
+    .icon-item span {
+        font-size: 0.9rem;
+        font-weight: 600;
+        color: var(--dark);
+    }
+    
+    /* تصميم رسائل النجاح والخطأ */
+    div[data-testid="stException"] {
+        background-color: #ffebee;
+        border-left: 5px solid #f44336;
+        padding: 1rem;
+        border-radius: 5px;
+        margin: 1rem 0;
+    }
+    
+    div[data-testid="stSuccess"] {
+        background-color: #e8f5e9;
+        border-left: 5px solid #4caf50;
+        padding: 1rem;
+        border-radius: 5px;
+        margin: 1rem 0;
+    }
+    
+    /* تصميم شريط التقدم */
+    .progress-container {
+        height: 8px;
+        background: #e0e0e0;
+        border-radius: 5px;
+        margin: 1.5rem 0;
+        overflow: hidden;
+    }
+    
+    .progress-bar {
+        height: 100%;
+        background: linear-gradient(90deg, var(--primary), var(--secondary));
+        border-radius: 5px;
+        width: 0%;
+        transition: width 1s ease-in-out;
+    }
+    
+    /* تصميم عناصر التبويب */
+    .tab-container {
+        display: flex;
+        justify-content: center;
+        margin-bottom: 2rem;
+    }
+    
+    .tab-item {
+        padding: 0.8rem 1.5rem;
+        margin: 0 0.5rem;
+        background: white;
+        border-radius: 50px;
+        cursor: pointer;
+        transition: var(--transition);
+        box-shadow: 0 2px 5px rgba(0,0,0,0.1);
+        font-weight: 600;
+        color: var(--dark);
+    }
+    
+    .tab-item:hover {
+        background: var(--secondary);
+        color: white;
+        transform: translateY(-3px);
+        box-shadow: 0 4px 8px rgba(0,0,0,0.15);
+    }
+    
+    .tab-item.active {
+        background: var(--primary);
+        color: white;
+    }
+    
+    /* تصميم الصور */
+    .image-container {
+        display: flex;
+        justify-content: center;
+        margin: 1.5rem 0;
+    }
+    
+    .image-container img {
+        max-width: 100%;
+        border-radius: 10px;
+        box-shadow: var(--shadow);
+        transition: var(--transition);
+    }
+    
+    .image-container img:hover {
+        transform: scale(1.02);
+        box-shadow: 0 8px 16px rgba(0,0,0,0.2);
+    }
+    
+    /* تصميم الفوتر */
+    .footer {
+        text-align: center;
+        margin-top: 3rem;
+        padding: 1.5rem;
+        color: var(--dark);
+        font-size: 0.9rem;
+    }
+    
+    /* تصميم متجاوب */
+    @media (max-width: 768px) {
+        .main-header h1 {
+            font-size: 2rem;
+        }
+        
+        .icon-item {
+            margin: 0 0.8rem;
+        }
+        
+        .icon-item i {
+            font-size: 2rem;
+        }
+    }
 </style>
 """, unsafe_allow_html=True)
-st.title("تصميــم يـــوســـــــف الأنســـــــــي")
 
-st.title("💰 حاسبة الضريبة| + | (مولدQR (ZATCA) | + Code128 | + Edit Metadata")
+# إضافة الرأس مع الأيقونات التفاعلية
+st.markdown("""
+<div class="main-header">
+    <h1><i class="fas fa-calculator"></i> تصميــم يـــوســـــــف الأنســـــــــي</h1>
+    <div class="subtitle"><i class="fas fa-coins"></i> حاسبة الضريبة | <i class="fas fa-qrcode"></i> ZATCA QR | <i class="fas fa-barcode"></i> Code128 | <i class="fas fa-file-pdf"></i> PDF Metadata</div>
+</div>
+""", unsafe_allow_html=True)
+
+# إضافة أيقونات تفاعلية
+st.markdown("""
+<div class="icon-container">
+    <div class="icon-item">
+        <i class="fas fa-calculator"></i>
+        <span>حاسبة الضريبة</span>
+    </div>
+    <div class="icon-item">
+        <i class="fas fa-qrcode"></i>
+        <span>رمز QR</span>
+    </div>
+    <div class="icon-item">
+        <i class="fas fa-barcode"></i>
+        <span>باركود</span>
+    </div>
+    <div class="icon-item">
+        <i class="fas fa-file-pdf"></i>
+        <span>ملف PDF</span>
+    </div>
+</div>
+""", unsafe_allow_html=True)
+
+# إضافة شريط تقدم تفاعلي
+st.markdown("""
+<div class="progress-container">
+    <div class="progress-bar" id="progressBar"></div>
+</div>
+""", unsafe_allow_html=True)
 
 # ================= حالة افتراضية ثابتة (مرة واحدة فقط) =================
 if "qr_initialized" not in st.session_state:
@@ -151,6 +538,7 @@ def write_meta(file, new_md):
 c1, c2 = st.columns(2)
 
 with c1:
+    st.markdown('<div class="card">', unsafe_allow_html=True)
     st.header("📊 حاسبة الضريبة")
     total_incl = st.number_input("المبلغ شامل الضريبة", min_value=0.0, step=0.01)
     tax_rate   = st.number_input("نسبة الضريبة (%)", min_value=1.0, max_value=100.0, value=15.0, step=0.01)
@@ -171,8 +559,10 @@ with c1:
             st.session_state["qr_total"] = f"{total_incl:.2f}"
             st.session_state["qr_vat"]   = f"{vat_amount:.2f}"
             st.toast("تم إرسال الإجمالي والضريبة إلى قسم مولّد QR ✅")
+    st.markdown('</div>', unsafe_allow_html=True)
 
 with c2:
+    st.markdown('<div class="card">', unsafe_allow_html=True)
     st.header("📑 Edit Metadata PDF")
     up = st.file_uploader("تحميل PDF", type=["pdf"])
     if up:
@@ -225,6 +615,7 @@ with c2:
         if st.button("حفظ Metadata"):
             out = write_meta(up, updated)
             st.download_button("تحميل الملف المعدّل", data=out, file_name=up.name, mime="application/pdf")
+    st.markdown('</div>', unsafe_allow_html=True)
 
 # =========================================================
 # الصف الأسفل: (يسار) Code128  —  (يمين) مولّد QR
@@ -232,6 +623,7 @@ with c2:
 c3, c4 = st.columns(2)
 
 with c3:
+    st.markdown('<div class="card">', unsafe_allow_html=True)
     st.header("🧾 مولّد Code-128 (1.86 × 0.34 inch @ 600 DPI)")
     v = st.text_input("النص/الرقم")
     if st.button("إنشاء Code-128"):
@@ -240,10 +632,14 @@ with c3:
         else:
             raw = render_code128(s)
             final = resize_code128(raw)
+            st.markdown('<div class="image-container">', unsafe_allow_html=True)
             st.image(final, caption=f"{WIDTH_IN}×{HEIGHT_IN} inch @ {DPI} DPI")
+            st.markdown('</div>', unsafe_allow_html=True)
             st.download_button("⬇️ تحميل", final, "code128.png", "image/png")
+    st.markdown('</div>', unsafe_allow_html=True)
 
 with c4:
+    st.markdown('<div class="card">', unsafe_allow_html=True)
     st.header("🔖 مولّد QR (ZATCA)")
 
     st.text_input("الرقم الضريبي (15 رقم)", key="qr_vat_number")
@@ -274,11 +670,63 @@ with c4:
             )
             st.code(b64, language="text")
             img = make_qr(b64)
+            st.markdown('<div class="image-container">', unsafe_allow_html=True)
             st.image(img, caption="رمز QR ZATCA")
+            st.markdown('</div>', unsafe_allow_html=True)
             st.download_button("⬇️ تحميل QR", img, "zatca_qr.png", "image/png")
+    st.markdown('</div>', unsafe_allow_html=True)
 
+# إضافة الفوتر
+st.markdown("""
+<div class="footer">
+    <p>تصميم وتطوير: يوسف الأنسي © 2023 | جميع الحقوق محفوظة</p>
+</div>
+""", unsafe_allow_html=True)
 
-
-
-
-
+# إضافة JavaScript للتفاعل
+st.markdown("""
+<script>
+    // تحريك شريط التقدم
+    document.addEventListener('DOMContentLoaded', function() {
+        const progressBar = document.getElementById('progressBar');
+        if (progressBar) {
+            setTimeout(() => {
+                progressBar.style.width = '100%';
+            }, 500);
+        }
+        
+        // تأثير التمرير السلس
+        document.querySelectorAll('a[href^="#"]').forEach(anchor => {
+            anchor.addEventListener('click', function (e) {
+                e.preventDefault();
+                document.querySelector(this.getAttribute('href')).scrollIntoView({
+                    behavior: 'smooth'
+                });
+            });
+        });
+        
+        // تأثير الظهور عند التمرير
+        const observerOptions = {
+            root: null,
+            rootMargin: '0px',
+            threshold: 0.1
+        };
+        
+        const observer = new IntersectionObserver((entries) => {
+            entries.forEach(entry => {
+                if (entry.isIntersecting) {
+                    entry.target.style.opacity = 1;
+                    entry.target.style.transform = 'translateY(0)';
+                }
+            });
+        }, observerOptions);
+        
+        document.querySelectorAll('.card').forEach(card => {
+            card.style.opacity = 0;
+            card.style.transform = 'translateY(20px)';
+            card.style.transition = 'opacity 0.6s ease, transform 0.6s ease';
+            observer.observe(card);
+        });
+    });
+</script>
+""", unsafe_allow_html=True)
