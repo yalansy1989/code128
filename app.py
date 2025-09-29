@@ -264,6 +264,12 @@ st.markdown("""
         box-shadow: 0 0 0 3px rgba(102, 126, 234, 0.3);
     }
     
+    /* تغيير لون الرقم الضريبي للأخضر عند بلوغ 15 رقم */
+    .vat-valid {
+        color: #4ade80 !important;
+        font-weight: 600;
+    }
+    
     div[data-testid="stNumberInput"] > div > div > input {
         background: var(--glass-bg);
         backdrop-filter: blur(10px);
@@ -603,6 +609,41 @@ st.markdown("""
             opacity: 1;
         }
     }
+    
+    /* تأثير الإكمال التلقائي */
+    .autocomplete-container {
+        position: relative;
+    }
+    
+    .autocomplete-suggestions {
+        position: absolute;
+        top: 100%;
+        left: 0;
+        right: 0;
+        background: var(--glass-bg);
+        backdrop-filter: blur(10px);
+        -webkit-backdrop-filter: blur(10px);
+        border: 1px solid var(--glass-border);
+        border-radius: 10px;
+        max-height: 200px;
+        overflow-y: auto;
+        z-index: 1000;
+        margin-top: 5px;
+    }
+    
+    .autocomplete-suggestion {
+        padding: 10px 15px;
+        cursor: pointer;
+        transition: var(--transition-normal);
+    }
+    
+    .autocomplete-suggestion:hover {
+        background: rgba(102, 126, 234, 0.2);
+    }
+    
+    .autocomplete-suggestion strong {
+        color: #4ade80;
+    }
 </style>
 """, unsafe_allow_html=True)
 
@@ -643,6 +684,11 @@ st.markdown("""
 </div>
 """, unsafe_allow_html=True)
 
+# ================= تهيئة التخزين =================
+# تهيئة قاموس لتخزين الأرقام الضريبية وأسماء البائعين
+if "vat_sellers" not in st.session_state:
+    st.session_state["vat_sellers"] = {}
+
 # ================= حالة افتراضية ثابتة (مرة واحدة فقط) =================
 if "qr_initialized" not in st.session_state:
     now_time = datetime.now().time().replace(microsecond=0)
@@ -658,6 +704,47 @@ if "qr_initialized" not in st.session_state:
         "qr_secs": now_time.second
     })
     st.session_state["qr_initialized"] = True
+
+# ================= دالة لتغيير لون الرقم الضريبي =================
+def update_vat_color():
+    vat_number = st.session_state.get("qr_vat_number", "")
+    vat_clean = _clean_vat(vat_number)
+    
+    # إضافة JavaScript لتغيير لون النص
+    st.markdown(f"""
+    <script>
+        document.addEventListener('DOMContentLoaded', function() {{
+            const vatInput = window.parent.document.querySelector('input[data-testid="stTextInput"]');
+            if (vatInput && vatInput.value.includes('الرقم الضريبي')) {{
+                const actualInput = vatInput.parentElement.querySelector('input');
+                if (actualInput) {{
+                    if ('{vat_clean}'.length === 15) {{
+                        actualInput.classList.add('vat-valid');
+                    }} else {{
+                        actualInput.classList.remove('vat-valid');
+                    }}
+                }}
+            }}
+        }});
+    </script>
+    """, unsafe_allow_html=True)
+    
+    # التحقق إذا كان الرقم الضريبي مخزن مسبقاً
+    if len(vat_clean) == 15 and vat_clean in st.session_state["vat_sellers"]:
+        seller_name = st.session_state["vat_sellers"][vat_clean]
+        if st.session_state.get("qr_seller") != seller_name:
+            st.session_state["qr_seller"] = seller_name
+            st.success(f"تم العثور على اسم البائع تلقائياً: {seller_name}")
+
+# ================= دالة لحفظ البائع مع الرقم الضريبي =================
+def save_seller_with_vat():
+    vat_number = st.session_state.get("qr_vat_number", "")
+    seller_name = st.session_state.get("qr_seller", "")
+    vat_clean = _clean_vat(vat_number)
+    
+    if len(vat_clean) == 15 and seller_name.strip():
+        st.session_state["vat_sellers"][vat_clean] = seller_name.strip()
+        st.success(f"تم حفظ البائع '{seller_name}' مع الرقم الضريبي '{vat_clean}'")
 
 # ================= أدوات مشتركة =================
 def _clean_vat(v: str) -> str: return re.sub(r"\D", "", v or "")
@@ -854,7 +941,7 @@ c3, c4 = st.columns(2)
 
 with c3:
     st.markdown('<div class="card glass-effect hover-lift">', unsafe_allow_html=True)
-    st.markdown('<h2><i class="fas fa-barcode"></i> مولّد Code-128 </h2>', unsafe_allow_html=True)
+    st.markdown('<h2><i class="fas fa-barcode"></i> مولّد Code-128 (1.86 × 0.34 inch @ 600 DPI)</h2>', unsafe_allow_html=True)
     v = st.text_input("النص/الرقم")
     if st.button("إنشاء Code-128"):
         s = sanitize(v)
@@ -872,8 +959,17 @@ with c4:
     st.markdown('<div class="card glass-effect hover-lift">', unsafe_allow_html=True)
     st.markdown('<h2><i class="fas fa-qrcode"></i> مولّد QR (ZATCA)</h2>', unsafe_allow_html=True)
 
-    st.text_input("الرقم الضريبي (15 رقم)", key="qr_vat_number")
-    st.text_input("اسم البائع", key="qr_seller")
+    # حقل الرقم الضريبي مع التحقق من الطول
+    st.text_input("الرقم الضريبي (15 رقم)", key="qr_vat_number", on_change=update_vat_color)
+    
+    # عرض عدد الأرقام المدخلة
+    vat_number = st.session_state.get("qr_vat_number", "")
+    vat_clean = _clean_vat(vat_number)
+    st.caption(f"عدد الأرقام المدخلة: {len(vat_clean)}/15")
+    
+    # حقل اسم البائع
+    st.text_input("اسم البائع", key="qr_seller", on_change=save_seller_with_vat)
+    
     st.text_input("الإجمالي (شامل)", key="qr_total")
     st.text_input("الضريبة", key="qr_vat")
 
@@ -909,8 +1005,7 @@ with c4:
 # إضافة الفوتر
 st.markdown("""
 <div class="footer">
-    <p>تصميم وتطوير: يوسف الأنسي © 2025 | جميع الحقوق محفوظة</p>
-    <p>0500900934</p>
+    <p>تصميم وتطوير: يوسف الأنسي © 2023 | جميع الحقوق محفوظة</p>
 </div>
 """, unsafe_allow_html=True)
 
@@ -955,8 +1050,21 @@ st.markdown("""
                 icon.style.boxShadow = '0 0 ' + (Math.random() * 20 + 20) + 'px rgba(255, 255, 255, ' + (Math.random() * 0.3 + 0.3) + ')';
             }, 2000);
         });
+        
+        // تغيير لون الرقم الضريبي للأخضر عند بلوغ 15 رقم
+        const vatInputs = document.querySelectorAll('input[data-testid="stTextInput"]');
+        vatInputs.forEach(input => {
+            if (input.placeholder && input.placeholder.includes('الرقم الضريبي')) {
+                input.addEventListener('input', function() {
+                    const cleanValue = this.value.replace(/\\D/g, '');
+                    if (cleanValue.length === 15) {
+                        this.classList.add('vat-valid');
+                    } else {
+                        this.classList.remove('vat-valid');
+                    }
+                });
+            }
+        });
     });
 </script>
 """, unsafe_allow_html=True)
-
-
